@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Aplicativo para gerenciamento, filtragem e consolidação de processos.">
+  <meta name="color-scheme" content="light dark">
+  <title>Gerenciamento de Processos</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <main class="container">
+    <div class="app-toolbar">
+      <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false" aria-label="Alternar modo claro e escuro">
+        <span aria-hidden="true">◐</span>
+        <span id="themeLabel">Modo escuro</span>
+      </button>
+    </div>
+
+    <h1>Gerenciamento de Processos</h1>
+
+    <div class="controls">
+      <label class="file-label">
+        <input type="file" id="excelFile" accept=".xlsx">
+        <span>Selecionar Excel</span>
+      </label>
+
+      <input type="text" id="searchInput" placeholder="Buscar..." class="input-text" aria-label="Buscar processos">
+
+      <label for="filterInput">Filtro:</label>
+      <input list="filterList" id="filterInput" class="input-text" placeholder="Digite ou escolha...">
+      <datalist id="filterList">
+        <option value="EP"></option>
+        <option value="ED"></option>
+        <option value="EF"></option>
+        <option value="Improcedente"></option>
+        <option value="NADJA"></option>
+        <option value="NADJA/FLÁVIO"></option>
+        <option value="COMPROMETIDO"></option>
+        <option value="FLÁVIO"></option>
+        <option value="ANA"></option>
+      </datalist>
+
+      <button id="applyFilterBtn" class="btn btn-amarelo" type="button">Aplicar Filtro</button>
+      <button id="clearFiltersBtn" class="btn btn-amarelo" type="button">Limpar Filtros</button>
+      <button id="drawBtn" class="btn btn-sorteio" type="button">Sortear 60% / 40%</button>
+      <button id="clearBtn" class="btn btn-laranja" type="button">Limpar Tudo</button>
+      <button id="sortAZ" class="btn btn-verde" type="button">A → Z</button>
+      <button id="sortZA" class="btn btn-verde" type="button">Z → A</button>
+      <button id="selectAllBtn" class="btn btn-roxo" type="button">Selecionar Todos</button>
+      <button id="deleteSelBtn" class="btn btn-vermelho" type="button">Excluir Selecionados</button>
+      <button id="exportPDF" class="btn btn-azul" type="button">Exportar PDF</button>
+      <button id="exportXLSX" class="btn btn-azul" type="button">Exportar Excel</button>
+    </div>
+
+    <div class="tabela-area" role="region" aria-label="Tabela de processos" tabindex="0">
+      <table id="mainTable">
+        <thead>
+          <tr id="headerRow"></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <section class="resumo-area" aria-labelledby="resumoTitulo">
+      <h3 id="resumoTitulo">Resumo Consolidado por Sócio</h3>
+      <div class="resumo-scroll" role="region" aria-label="Resumo consolidado" tabindex="0">
+        <table class="resumo-tabela">
+          <thead>
+            <tr>
+              <th>Sócio</th>
+              <th>Quantidade</th>
+              <th>Percentual (%)</th>
+              <th>Valor Total (R$)</th>
+              <th>Percentual (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Ana</td>
+              <td id="qtdAna">0</td>
+              <td id="percentAna">0%</td>
+              <td id="valorAna">R$ 0,00</td>
+              <td id="percentValorAna">0%</td>
+            </tr>
+            <tr>
+              <td>Flávio</td>
+              <td id="qtdFlavio">0</td>
+              <td id="percentFlavio">0%</td>
+              <td id="valorFlavio">R$ 0,00</td>
+              <td id="percentValorFlavio">0%</td>
+            </tr>
+            <tr class="linha-total">
+              <td><strong>Total Geral</strong></td>
+              <td id="qtdTotal"><strong>0</strong></td>
+              <td id="percentTotal"><strong>100%</strong></td>
+              <td id="valorTotal"><strong>R$ 0,00</strong></td>
+              <td id="percentTotalValor"><strong>100%</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
