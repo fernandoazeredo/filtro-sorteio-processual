@@ -7,11 +7,11 @@
   <meta name="color-scheme" content="light dark">
   <title>Gerenciamento de Processos</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=20260825-1815">
+  <link rel="stylesheet" href="style.css?v=20260825-1845">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js" defer></script>
-  <script src="script.js?v=20260825-1815" defer></script>
+  <script src="script.js?v=20260825-1845" defer></script>
 </head>
 
 <body>
@@ -65,49 +65,18 @@
     </div>
 
     <div class="tabela-area" role="region" aria-label="Tabela de processos" tabindex="0">
-      <table id="mainTable">
-        <thead>
-          <tr id="headerRow"></tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+      <table id="mainTable"><thead><tr id="headerRow"></tr></thead><tbody id="tableBody"></tbody></table>
     </div>
 
     <section class="resumo-area" aria-labelledby="resumoTitulo">
       <h3 id="resumoTitulo">Resumo Consolidado por Sócio</h3>
       <div class="resumo-scroll" role="region" aria-label="Resumo consolidado" tabindex="0">
         <table class="resumo-tabela">
-          <thead>
-            <tr>
-              <th>Sócio</th>
-              <th>Quantidade</th>
-              <th>Percentual (%)</th>
-              <th>Valor Total (R$)</th>
-              <th>Percentual (%)</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Sócio</th><th>Quantidade</th><th>Percentual (%)</th><th>Valor Total (R$)</th><th>Percentual (%)</th></tr></thead>
           <tbody>
-            <tr>
-              <td>Ana</td>
-              <td id="qtdAna">0</td>
-              <td id="percentAna">0%</td>
-              <td id="valorAna">R$ 0,00</td>
-              <td id="percentValorAna">0%</td>
-            </tr>
-            <tr>
-              <td>Flávio</td>
-              <td id="qtdFlavio">0</td>
-              <td id="percentFlavio">0%</td>
-              <td id="valorFlavio">R$ 0,00</td>
-              <td id="percentValorFlavio">0%</td>
-            </tr>
-            <tr class="linha-total">
-              <td><strong>Total Geral</strong></td>
-              <td id="qtdTotal"><strong>0</strong></td>
-              <td id="percentTotal"><strong>100%</strong></td>
-              <td id="valorTotal"><strong>R$ 0,00</strong></td>
-              <td id="percentTotalValor"><strong>100%</strong></td>
-            </tr>
+            <tr><td>Ana</td><td id="qtdAna">0</td><td id="percentAna">0%</td><td id="valorAna">R$ 0,00</td><td id="percentValorAna">0%</td></tr>
+            <tr><td>Flávio</td><td id="qtdFlavio">0</td><td id="percentFlavio">0%</td><td id="valorFlavio">R$ 0,00</td><td id="percentValorFlavio">0%</td></tr>
+            <tr class="linha-total"><td><strong>Total Geral</strong></td><td id="qtdTotal"><strong>0</strong></td><td id="percentTotal"><strong>100%</strong></td><td id="valorTotal"><strong>R$ 0,00</strong></td><td id="percentTotalValor"><strong>100%</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -117,23 +86,9 @@
   <div id="tipsDialog" class="tips-modal" hidden>
     <div class="tips-backdrop" data-close-tips></div>
     <section class="tips-panel" role="dialog" aria-modal="true" aria-labelledby="tipsTitle" aria-describedby="tipsIntro" tabindex="-1">
-      <header class="tips-header">
-        <div>
-          <p class="tips-eyebrow">GUIA DO APLICATIVO</p>
-          <h2 id="tipsTitle">Dicas de uso</h2>
-        </div>
-        <button id="tipsCloseBtn" class="tips-close" type="button" aria-label="Fechar dicas">×</button>
-      </header>
-
-      <div class="tips-content">
-        <p id="tipsIntro" class="tips-intro">
-          Carregue a planilha recebida do Jurídico e siga as orientações exibidas pelo aplicativo.
-        </p>
-      </div>
-
-      <footer class="tips-footer">
-        <button id="tipsCloseFooterBtn" class="btn btn-neutral" type="button">Fechar</button>
-      </footer>
+      <header class="tips-header"><div><p class="tips-eyebrow">GUIA DO APLICATIVO</p><h2 id="tipsTitle">Dicas de uso</h2></div><button id="tipsCloseBtn" class="tips-close" type="button" aria-label="Fechar dicas">×</button></header>
+      <div class="tips-content"><p id="tipsIntro" class="tips-intro">Carregue a planilha recebida do Jurídico e siga as orientações exibidas pelo aplicativo.</p></div>
+      <footer class="tips-footer"><button id="tipsCloseFooterBtn" class="btn btn-neutral" type="button">Fechar</button></footer>
     </section>
   </div>
 </body>
