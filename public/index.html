@@ -44,6 +44,7 @@
         <option value="ED"></option>
         <option value="EF"></option>
         <option value="Improcedente"></option>
+        <option value="Aleatório"></option>
         <option value="NADJA"></option>
         <option value="NADJA/FLÁVIO"></option>
         <option value="COMPROMETIDO"></option>
@@ -126,96 +127,8 @@
 
       <div class="tips-content">
         <p id="tipsIntro" class="tips-intro">
-          Siga esta sequência para preparar a planilha, importar os processos, realizar os sorteios e exportar o resultado.
+          Carregue a planilha recebida do Jurídico e siga as orientações exibidas pelo aplicativo.
         </p>
-
-        <section class="tips-step">
-          <h3><span>1</span> Prepare uma cópia da planilha original</h3>
-          <ol>
-            <li>Abra a planilha grande recebida e salve uma cópia com outro nome.</li>
-            <li>Na primeira aba do arquivo, mantenha somente as sete colunas abaixo.</li>
-            <li>Deixe os cabeçalhos na primeira linha e os processos a partir da segunda linha.</li>
-            <li>Não altere a grafia, os acentos ou os espaços dos cabeçalhos.</li>
-          </ol>
-
-          <div class="tips-model" role="region" aria-label="Modelo visual do cabeçalho da planilha" tabindex="0">
-            <table class="tips-model-table">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Número de CNJ</th>
-                  <th>Tipo</th>
-                  <th>Valor da causa</th>
-                  <th>Última Decisão</th>
-                  <th>Sócio a gerir</th>
-                  <th>Critério</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Nome do cliente</td>
-                  <td>0000000-00.0000.0.00.0000</td>
-                  <td>EP</td>
-                  <td>10000,00</td>
-                  <td>Improcedente</td>
-                  <td></td>
-                  <td>NADJA</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p class="tips-caption">Arraste horizontalmente para ver todas as colunas em telas menores. A linha de exemplo é apenas ilustrativa.</p>
-          <button id="downloadModelBtn" class="btn btn-azul tips-download" type="button">Baixar modelo Excel</button>
-        </section>
-
-        <section class="tips-step">
-          <h3><span>2</span> Confira o conteúdo de cada coluna</h3>
-          <dl class="tips-columns">
-            <div><dt>Cliente</dt><dd>Nome da parte ou do cliente.</dd></div>
-            <div><dt>Número de CNJ</dt><dd>Número identificador do processo.</dd></div>
-            <div><dt>Tipo</dt><dd>Informe EP, ED ou EF quando aplicável.</dd></div>
-            <div><dt>Valor da causa</dt><dd>Valor numérico usado no resumo consolidado.</dd></div>
-            <div><dt>Última Decisão</dt><dd>O filtro “Improcedente” procura este texto nesta coluna.</dd></div>
-            <div><dt>Sócio a gerir</dt><dd>Deixe em branco para sortear. Se já contiver Ana ou Flávio, a atribuição será preservada.</dd></div>
-            <div><dt>Critério</dt><dd>Usado nos filtros NADJA, NADJA/FLÁVIO, COMPROMETIDO, FLÁVIO e ANA.</dd></div>
-          </dl>
-          <div class="tips-note">
-            <strong>Importante:</strong> não é necessário criar a coluna “Sorteado Para”. Nesta versão, o resultado é registrado diretamente em <strong>Sócio a gerir</strong>.
-          </div>
-        </section>
-
-        <section class="tips-step">
-          <h3><span>3</span> Importe e confira os processos</h3>
-          <ol>
-            <li>Clique em <strong>Selecionar Excel</strong> e escolha o arquivo <strong>.xlsx</strong>.</li>
-            <li>O aplicativo lê somente a primeira aba da planilha.</li>
-            <li>Confira a tabela exibida antes de iniciar o sorteio.</li>
-            <li>Use a busca ou a ordenação A → Z / Z → A apenas para localizar e conferir registros.</li>
-          </ol>
-        </section>
-
-        <section class="tips-step">
-          <h3><span>4</span> Aplique um filtro e faça o sorteio</h3>
-          <ol>
-            <li>Escolha um filtro: EP, ED, EF, Improcedente, NADJA, NADJA/FLÁVIO, COMPROMETIDO, FLÁVIO ou ANA.</li>
-            <li>Clique em <strong>Aplicar Filtro</strong> e confira o grupo exibido.</li>
-            <li>Clique em <strong>Sortear 60% / 40%</strong>.</li>
-            <li>Repita o procedimento para cada grupo que precisar sortear.</li>
-          </ol>
-          <div class="tips-warning">
-            <strong>Como o sorteio funciona:</strong> ele distribui aproximadamente 60% dos processos para Flávio e 40% para Ana, considerando a <strong>quantidade</strong>, não o valor das causas. Somente o grupo do filtro aplicado participa. Registros já atribuídos a Ana ou Flávio são mantidos.
-          </div>
-        </section>
-
-        <section class="tips-step">
-          <h3><span>5</span> Exporte e encerre o trabalho</h3>
-          <ol>
-            <li>Use <strong>Exportar Excel</strong> ou <strong>Exportar PDF</strong> para salvar o grupo atualmente exibido.</li>
-            <li>Os dados importados e os sorteios ficam guardados neste navegador.</li>
-            <li>Clique em <strong>Limpar Tudo</strong> somente quando quiser apagar os dados guardados e começar novamente.</li>
-          </ol>
-        </section>
       </div>
 
       <footer class="tips-footer">
