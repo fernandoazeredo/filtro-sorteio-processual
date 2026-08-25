@@ -69,7 +69,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
     return{rows,mode:"juridico",baseSheet:calcName,enriched};
   }
-  function classify(r){const type=norm(r.Tipo),dec=norm(r["Última Decisão"]),crit=norm(r.Critério);if(crit.includes("CLIENTE ANA PAULA")||crit==="ANA")return"ANA";if(crit.includes("CLIENTE FLAVIO")||crit==="FLAVIO")return"FLAVIO";if(crit.includes("NADJA - SOLICITOU FICAR FLAVIO")||crit.includes("NADJA/FLAVIO"))return"NADJA/FLAVIO";if(crit==="NADJA")return"NADJA";if(crit.includes("COMPROMET")||crit.includes("COMPREMET"))return"COMPROMETIDO";if(dec==="IMPROCEDENTE")return"IMPROCEDENTE";if(type==="EF")return"EF";if(type==="ED")return"ED";if(type==="EP")return"EP";return"ALEATORIO";}
+  function classify(r){const type=norm(r.Tipo),dec=norm(r["Última Decisão"]),crit=norm(r.Critério);if(type==="EF")return"EF";if(crit.includes("CLIENTE ANA PAULA")||crit==="ANA")return"ANA";if(crit.includes("CLIENTE FLAVIO")||crit==="FLAVIO")return"FLAVIO";if(crit.includes("NADJA - SOLICITOU FICAR FLAVIO")||crit.includes("NADJA/FLAVIO"))return"NADJA/FLAVIO";if(crit==="NADJA")return"NADJA";if(crit.includes("COMPROMET")||crit.includes("COMPREMET"))return"COMPROMETIDO";if(dec==="IMPROCEDENTE")return"IMPROCEDENTE";if(type==="ED")return"ED";if(type==="EP")return"EP";return"ALEATORIO";}
   function buildGroups(){groupMap=new Map(ALL_GROUPS.map(g=>[g,[]]));for(const r of master){const g=classify(r);r.__group=g;groupMap.get(g).push(r);}}
   const groupRows=g=>groupMap.get(g)||[];
   const clearAssignments=()=>master.forEach(r=>r["Sorteado Para"]="");
