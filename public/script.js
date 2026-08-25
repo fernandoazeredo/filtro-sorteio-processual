@@ -1,545 +1,73 @@
-// Gerenciamento de Processos: upload, filtros, exportação PDF/XLSX e resumo consolidado.
-
 window.addEventListener("DOMContentLoaded", () => {
-  const DATA_STORAGE_KEY = "filtroSorteioProcessual.data.v1";
   const THEME_STORAGE_KEY = "filtroSorteioProcessual.theme.v1";
-  let originalData = [];
-  let filteredData = [];
-  let activeFilter = "";
+  const REQUIRED = ["Cliente","Número de CNJ","Tipo","Valor da causa","Última Decisão","Sócio a gerir","Critério"];
+  const DEFAULT_COLS = [...REQUIRED,"Sorteado Para"];
+  const RANDOM_GROUPS = ["EP","ED","EF","IMPROCEDENTE","ALEATORIO"];
+  let master=[], filtered=[], activeFilter="", available=[], selected=[...DEFAULT_COLS], batchDone=false, sheetCounts=[];
+  const $=id=>document.getElementById(id);
+  const norm=v=>String(v??"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toUpperCase().replace(/\s+/g," ").trim();
+  const parseBRL=v=>{if(typeof v==="number")return Number.isFinite(v)?v:0;let t=String(v??"").trim(),neg=/^-|^-\s*R\$|^\(.*\)$/i.test(t);if(/^\(.*\)$/.test(t))t=t.slice(1,-1);t=t.replace(/R\$/gi,"").replace(/-/g,"").replace(/\s/g,"");if(t.includes(","))t=t.replace(/\./g,"").replace(/,/g,".");const n=Number.parseFloat(t);return Number.isFinite(n)?(neg?-n:n):0;};
+  const brl=v=>parseBRL(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  const pct=(a,b)=>b?`${((a/b)*100).toFixed(2)}%`:"0%";
+  const partner=r=>{const v=norm(r["Sorteado Para"])||norm(r["Sócio a gerir"]);return v.includes("ANA")?"Ana":v.includes("FLAVIO")?"Flávio":"";};
+  const key=r=>norm(r["Número de CNJ"])?`CNJ:${norm(r["Número de CNJ"])}`:norm(r.ID)?`ID:${norm(r.ID)}`:`R:${norm(r.Cliente)}|${norm(r.Pasta)}`;
+  const clean=rows=>rows.filter(r=>r&&String(r.Cliente??"").trim()&&(String(r["Número de CNJ"]??"").trim()||String(r.ID??"").trim()));
 
-  const excelFile = document.getElementById("excelFile");
-  const searchInput = document.getElementById("searchInput");
-  const filterInput = document.getElementById("filterInput");
-  const applyFilterBtn = document.getElementById("applyFilterBtn");
-  const clearFiltersBtn = document.getElementById("clearFiltersBtn");
-  const drawBtn = document.getElementById("drawBtn");
-  const clearBtn = document.getElementById("clearBtn");
-  const sortAZ = document.getElementById("sortAZ");
-  const sortZA = document.getElementById("sortZA");
-  const selectAllBtn = document.getElementById("selectAllBtn");
-  const deleteSelBtn = document.getElementById("deleteSelBtn");
-  const headerRow = document.getElementById("headerRow");
-  const tableBody = document.getElementById("tableBody");
-  const exportPDFBtn = document.getElementById("exportPDF");
-  const exportXLSXBtn = document.getElementById("exportXLSX");
-  const themeToggle = document.getElementById("themeToggle");
-  const themeLabel = document.getElementById("themeLabel");
-  const tipsBtn = document.getElementById("tipsBtn");
-  const tipsDialog = document.getElementById("tipsDialog");
-  const tipsPanel = tipsDialog.querySelector(".tips-panel");
-  const tipsCloseBtn = document.getElementById("tipsCloseBtn");
-  const tipsCloseFooterBtn = document.getElementById("tipsCloseFooterBtn");
-  const downloadModelBtn = document.getElementById("downloadModelBtn");
-  let lastFocusedElement = null;
+  function setTheme(t){const d=t==="dark";document.documentElement.dataset.theme=d?"dark":"light";$("themeToggle").setAttribute("aria-pressed",String(d));$("themeLabel").textContent=d?"Modo claro":"Modo escuro";}
+  setTheme(localStorage.getItem(THEME_STORAGE_KEY)||(matchMedia?.("(prefers-color-scheme: dark)").matches?"dark":"light"));
+  $("themeToggle").onclick=()=>{const n=document.documentElement.dataset.theme==="dark"?"light":"dark";setTheme(n);localStorage.setItem(THEME_STORAGE_KEY,n);};
 
-  const normalize = (str) =>
-    String(str ?? "")
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "")
-      .toUpperCase()
-      .trim();
+  const oldTips=$("tipsDialog");
+  $("tipsBtn").onclick=()=>{oldTips.hidden=false;document.body.classList.add("modal-open");};
+  const closeTips=()=>{oldTips.hidden=true;document.body.classList.remove("modal-open");};
+  $("tipsCloseBtn").onclick=closeTips;$("tipsCloseFooterBtn").onclick=closeTips;oldTips.addEventListener("click",e=>{if(e.target.hasAttribute("data-close-tips"))closeTips();});
+  const tipsContent=oldTips.querySelector(".tips-content");
+  if(tipsContent)tipsContent.innerHTML=`<p class="tips-intro">Trabalhe com a cópia da planilha recebida do Jurídico. O arquivo original não precisa ser alterado.</p><section class="tips-step"><h3><span>1</span> Importe a planilha</h3><ol><li>Selecione o arquivo .xlsx recebido do Jurídico.</li><li>O aplicativo lê todas as abas com processos e identifica registros repetidos pelo CNJ/ID.</li></ol></section><section class="tips-step"><h3><span>2</span> Escolha as colunas uma vez</h3><ol><li>Após o upload, clique em <strong>Escolher Colunas</strong>.</li><li>A seleção controla a tela e os relatórios; a planilha original permanece intacta.</li></ol><div class="tips-note"><strong>Sorteado Para</strong> registra o resultado sem apagar <strong>Sócio a gerir</strong>.</div></section><section class="tips-step"><h3><span>3</span> Confira e execute</h3><ol><li>Clique em <strong>Conferir Grupos</strong>.</li><li>Clique em <strong>Executar Todos os Sorteios</strong> para processar o lote.</li><li>Atribuições já existentes são preservadas e um mesmo processo não é sorteado duas vezes.</li></ol></section><section class="tips-step"><h3><span>4</span> Relatórios</h3><ol><li>Use <strong>Baixar Relatórios do Lote</strong> para gerar PDFs separados e o consolidado.</li><li>O modo de filtro manual continua disponível para conferência.</li></ol></section>`;
 
-  const parseBRL = (value) => {
-    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-    const normalizedValue = String(value ?? "")
-      .replace(/R\$/gi, "")
-      .replace(/\s/g, "")
-      .replace(/\./g, "")
-      .replace(/,/g, ".");
-    const parsedValue = Number.parseFloat(normalizedValue);
-    return Number.isFinite(parsedValue) ? parsedValue : 0;
-  };
+  const controls=document.querySelector(".controls");
+  const colBtn=document.createElement("button");colBtn.className="btn btn-roxo";colBtn.type="button";colBtn.textContent="Escolher Colunas";colBtn.disabled=true;
+  const previewBtn=document.createElement("button");previewBtn.className="btn btn-amarelo";previewBtn.type="button";previewBtn.textContent="Conferir Grupos";previewBtn.disabled=true;
+  const packageBtn=document.createElement("button");packageBtn.className="btn btn-azul";packageBtn.type="button";packageBtn.textContent="Baixar Relatórios do Lote";packageBtn.disabled=true;
+  controls.insertBefore(colBtn,$("applyFilterBtn"));controls.insertBefore(previewBtn,$("applyFilterBtn"));controls.appendChild(packageBtn);
+  $("drawBtn").textContent="Executar Todos os Sorteios";
 
-  const formatBRL = (value) =>
-    parseBRL(value).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL"
-    });
+  function mergeSheets(items){const map=new Map();for(const {name,rows} of items)for(const src of rows){const r={...src},k=key(r);if(!map.has(k))map.set(k,r);const t=map.get(k);for(const c of Object.keys(r))if((t[c]===""||t[c]==null)&&r[c]!==""&&r[c]!=null)t[c]=r[c];if(!t.__sheets)t.__sheets=new Set();t.__sheets.add(name);}return [...map.values()].map(r=>({...r,__sheets:[...(r.__sheets||[])]}));}
+  function detectCols(items){const out=[],seen=new Set();for(const {rows} of items)for(const r of rows.slice(0,20))for(const c of Object.keys(r))if(!c.startsWith("__")&&!seen.has(c)){seen.add(c);out.push(c);}if(!seen.has("Sorteado Para"))out.push("Sorteado Para");return out;}
+  function match(r,g){const type=norm(r.Tipo),dec=norm(r["Última Decisão"]),crit=norm(r.Critério),s=(r.__sheets||[]).map(norm);if(g==="EP")return type==="EP"||s.includes("EP");if(g==="ED")return type==="ED"||s.includes("ED");if(g==="EF")return type==="EF"||s.includes("EF");if(g==="IMPROCEDENTE")return dec==="IMPROCEDENTE"||s.includes("IMPROCEDENTE");if(g==="ALEATORIO")return crit.includes("ALEATORIO")||s.some(x=>x.includes("ALEATOR"));if(g==="NADJA/FLAVIO")return crit.includes("NADJA - SOLICITOU FICAR FLAVIO")||crit.includes("NADJA/FLAVIO")||s.some(x=>x.includes("NADJA - SOLICITOU FICAR FLAVIO"));if(g==="NADJA")return (crit==="NADJA"||s.includes("NADJA"))&&!match(r,"NADJA/FLAVIO");if(g==="COMPROMETIDO")return crit.includes("COMPROMET")||s.some(x=>x.includes("COMPROMET"));if(g==="FLAVIO")return crit.includes("CLIENTE FLAVIO")||crit==="FLAVIO"||s.some(x=>x.includes("CLIENTES FLAVIO"));if(g==="ANA")return crit.includes("CLIENTE ANA PAULA")||crit==="ANA"||s.some(x=>x.includes("CLIENTE ANA PAULA"));return false;}
+  const groupRows=g=>master.filter(r=>match(r,g));
+  function hydrate(){for(const r of master){if(norm(r["Sorteado Para"]))continue;const s=norm(r["Sócio a gerir"]);r["Sorteado Para"]=s.includes("ANA")?"Ana":s.includes("FLAVIO")?"Flávio":"";}}
+  function fixed(){for(const r of master){if(partner(r))continue;if(match(r,"NADJA/FLAVIO")||match(r,"COMPROMETIDO")||match(r,"FLAVIO"))r["Sorteado Para"]="Flávio";else if(match(r,"NADJA")||match(r,"ANA"))r["Sorteado Para"]="Ana";}}
+  function rnd(max){if(max<=1)return 0;const a=new Uint32Array(1),lim=Math.floor(0x100000000/max)*max;let v;do{crypto.getRandomValues(a);v=a[0];}while(v>=lim);return v%max;}
+  function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=rnd(i+1);[b[i],b[j]]=[b[j],b[i]];}return b;}
+  function assign(g){const rows=groupRows(g),ana=rows.filter(r=>partner(r)==="Ana").length,fla=rows.filter(r=>partner(r)==="Flávio").length,p=rows.filter(r=>!partner(r));if(!p.length)return 0;const tf=Math.round(rows.length*.6),ta=rows.length-tf;let nf=Math.max(0,tf-fla),na=Math.max(0,ta-ana),extra=p.length-nf-na;if(extra>0){if(fla>tf)na+=extra;else nf+=extra;}shuffle(p).forEach((r,i)=>r["Sorteado Para"]=i<nf?"Flávio":"Ana");return p.length;}
 
-  const percent = (part, total) =>
-    total ? `${((part / total) * 100).toFixed(2)}%` : "0%";
+  $("excelFile").onchange=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const wb=XLSX.read(new Uint8Array(ev.target.result),{type:"array",cellStyles:true}),items=[];sheetCounts=[];for(const name of wb.SheetNames){const rows=clean(XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:"",raw:true}));if(rows.length){items.push({name,rows});sheetCounts.push([name,rows.length]);}}if(!items.length)throw Error("Nenhuma aba com processos foi encontrada.");available=detectCols(items);master=mergeSheets(items);hydrate();filtered=[...master];activeFilter="";selected=DEFAULT_COLS.filter(c=>available.includes(c));if(!selected.includes("Sorteado Para"))selected.push("Sorteado Para");batchDone=false;colBtn.disabled=previewBtn.disabled=false;packageBtn.disabled=true;render(filtered);summaryUI(filtered);alert(`Planilha carregada com sucesso.\nAbas com processos: ${items.length}.\nProcessos únicos identificados: ${master.length}.\n\nAgora escolha as colunas dos relatórios e confira os grupos.`);}catch(err){alert(`Erro ao ler planilha: ${err.message}`);reset();}};reader.readAsArrayBuffer(file);};
 
-  function saveData() {
-    try {
-      localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(originalData));
-      return true;
-    } catch (error) {
-      alert(`Não foi possível salvar os dados no navegador: ${error.message}`);
-      return false;
-    }
-  }
+  colBtn.onclick=()=>{if(!available.length)return;const numbered=available.map((c,i)=>`${i+1}. ${c}${REQUIRED.includes(c)?" [essencial]":""}`).join("\n");const defaults=selected.map(c=>available.indexOf(c)+1).filter(n=>n>0).join(",");const ans=prompt(`Escolha as colunas que aparecerão na tela e nos relatórios.\n\nDigite os números separados por vírgula. As essenciais serão mantidas automaticamente.\n\n${numbered}`,defaults);if(ans===null)return;const nums=ans.split(/[,;\s]+/).map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=available.length);selected=available.filter((c,i)=>nums.includes(i+1)||REQUIRED.includes(c));if(!selected.includes("Sorteado Para"))selected.push("Sorteado Para");render(filtered);alert(`Seleção salva: ${selected.length} colunas.`);};
 
-  function restoreData() {
-    try {
-      const savedData = localStorage.getItem(DATA_STORAGE_KEY);
-      if (!savedData) return;
-      const parsedData = JSON.parse(savedData);
-      if (!Array.isArray(parsedData)) return;
-      originalData = parsedData;
-      filteredData = [...originalData];
-      renderTable(filteredData);
-      atualizarResumo(filteredData);
-    } catch (error) {
-      localStorage.removeItem(DATA_STORAGE_KEY);
-      alert(`Os dados salvos no navegador não puderam ser recuperados: ${error.message}`);
-    }
-  }
+  function groupPreview(){const groups=[["EP","EP","60/40"],["ED","ED","60/40"],["EF","EF","60/40"],["IMPROCEDENTE","Improcedente","60/40"],["ALEATORIO","Aleatório","60/40"],["NADJA","NADJA/Ana","Ana"],["NADJA/FLAVIO","NADJA/Flávio","Flávio"],["COMPROMETIDO","Comprometido","Flávio"],["FLAVIO","Cliente Flávio","Flávio"],["ANA","Cliente Ana Paula","Ana"]];return groups.map(([g,n,r])=>{const rows=groupRows(g),a=rows.filter(x=>partner(x)).length;return `${n}: ${rows.length} | atribuídos ${a} | pendentes ${rows.length-a} | regra ${r}`;}).join("\n");}
+  previewBtn.onclick=()=>alert(`CONFERÊNCIA DOS GRUPOS\n\n${groupPreview()}\n\nProcessos únicos na base: ${master.length}.\nUm mesmo processo pode aparecer em mais de um relatório, mas só será atribuído uma vez.`);
 
-  function setTheme(theme) {
-    const darkMode = theme === "dark";
-    document.documentElement.dataset.theme = theme;
-    themeToggle.setAttribute("aria-pressed", String(darkMode));
-    themeLabel.textContent = darkMode ? "Modo claro" : "Modo escuro";
-  }
+  $("drawBtn").onclick=()=>{if(!master.length){alert("Selecione a planilha primeiro.");return;}const pending=master.filter(r=>!partner(r)).length;if(!confirm(`Executar todos os grupos de uma única vez?\n\nProcessos únicos: ${master.length}\nSem atribuição antes do lote: ${pending}\n\nAtribuições existentes serão preservadas.`))return;hydrate();fixed();let made=0;for(const g of RANDOM_GROUPS)made+=assign(g);batchDone=true;packageBtn.disabled=false;filtered=[...master];activeFilter="";render(filtered);summaryUI(master);alert(`Sorteios concluídos.\nNovas atribuições aleatórias: ${made}.\n\nVocê já pode baixar os relatórios do lote.`);};
 
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  const preferredTheme = savedTheme || (
-    window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-  );
-  setTheme(preferredTheme === "dark" ? "dark" : "light");
+  function render(data){const hr=$("headerRow"),tb=$("tableBody");hr.innerHTML=tb.innerHTML="";if(!data.length)return;const cols=selected.filter(c=>available.includes(c)||c==="Sorteado Para");const sh=document.createElement("th");const sa=document.createElement("input");sa.type="checkbox";sa.setAttribute("aria-label","Selecionar todas as linhas");sh.appendChild(sa);hr.appendChild(sh);for(const c of cols){const th=document.createElement("th");th.textContent=c;hr.appendChild(th);}data.forEach((r,i)=>{const tr=document.createElement("tr"),sd=document.createElement("td"),cb=document.createElement("input");cb.type="checkbox";cb.className="rowCheckbox";cb.dataset.index=i;sd.appendChild(cb);tr.appendChild(sd);for(const c of cols){const td=document.createElement("td");td.textContent=c==="Valor da causa"?brl(r[c]):(r[c]??"");tr.appendChild(td);}tb.appendChild(tr);});sa.onchange=()=>document.querySelectorAll(".rowCheckbox").forEach(c=>c.checked=sa.checked);}
+  function sum(data){let ac=0,av=0,fc=0,fv=0;for(const r of data){const p=partner(r),v=parseBRL(r["Valor da causa"]);if(p==="Ana"){ac++;av+=v;}else if(p==="Flávio"){fc++;fv+=v;}}return{ac,av,fc,fv,tc:ac+fc,tv:av+fv};}
+  function summaryUI(data){const s=sum(data);$("qtdAna").textContent=s.ac;$("percentAna").textContent=pct(s.ac,s.tc);$("valorAna").textContent=brl(s.av);$("percentValorAna").textContent=pct(s.av,s.tv);$("qtdFlavio").textContent=s.fc;$("percentFlavio").textContent=pct(s.fc,s.tc);$("valorFlavio").textContent=brl(s.fv);$("percentValorFlavio").textContent=pct(s.fv,s.tv);$("qtdTotal").textContent=s.tc;$("valorTotal").textContent=brl(s.tv);}
 
-  themeToggle.addEventListener("click", () => {
-    const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-  });
+  function applyFilter(){const f=norm($("filterInput").value),map={EP:"EP",ED:"ED",EF:"EF",IMPROCEDENTE:"IMPROCEDENTE",ALEATORIO:"ALEATORIO",NADJA:"NADJA","NADJA/FLAVIO":"NADJA/FLAVIO",COMPROMETIDO:"COMPROMETIDO",FLAVIO:"FLAVIO",ANA:"ANA"};if(!map[f]){alert("Filtro inválido ou não selecionado.");return;}activeFilter=map[f];filtered=groupRows(activeFilter);render(filtered);summaryUI(filtered);}
+  $("applyFilterBtn").onclick=applyFilter;$("clearFiltersBtn").onclick=()=>{$("searchInput").value=$("filterInput").value="";activeFilter="";filtered=[...master];render(filtered);summaryUI(filtered);};
+  $("searchInput").oninput=()=>{const t=norm($("searchInput").value);activeFilter="";filtered=master.filter(r=>Object.entries(r).some(([k,v])=>!k.startsWith("__")&&norm(v).includes(t)));render(filtered);summaryUI(filtered);};
+  $("sortAZ").onclick=()=>{filtered.sort((a,b)=>String(a.Cliente||"").localeCompare(String(b.Cliente||""),"pt-BR"));render(filtered);};$("sortZA").onclick=()=>{filtered.sort((a,b)=>String(b.Cliente||"").localeCompare(String(a.Cliente||""),"pt-BR"));render(filtered);};
+  $("selectAllBtn").onclick=()=>document.querySelectorAll(".rowCheckbox").forEach(c=>c.checked=true);$("deleteSelBtn").onclick=()=>{const idx=[...document.querySelectorAll(".rowCheckbox:checked")].map(c=>+c.dataset.index).sort((a,b)=>b-a);for(const i of idx){const k=key(filtered[i]);master=master.filter(r=>key(r)!==k);filtered.splice(i,1);}render(filtered);summaryUI(filtered);};
 
-  function openTips() {
-    lastFocusedElement = document.activeElement;
-    tipsDialog.hidden = false;
-    document.body.classList.add("modal-open");
-    tipsBtn.setAttribute("aria-expanded", "true");
-    requestAnimationFrame(() => tipsPanel.focus());
-  }
+  const reportCols=()=>selected.filter(c=>available.includes(c)||c==="Sorteado Para");
+  function makePDF(title,rows){const doc=new jspdf.jsPDF({orientation:"landscape"}),cols=reportCols();doc.setFontSize(13);doc.text(title,14,12);doc.setFontSize(8);doc.text(`Exportado em: ${new Date().toLocaleString("pt-BR")}`,14,18);doc.autoTable({startY:22,head:[cols],body:rows.map(r=>cols.map(c=>c==="Valor da causa"?brl(r[c]):r[c]??"")),styles:{fontSize:6,cellPadding:1.1}});const s=sum(rows),y=doc.lastAutoTable.finalY+7;doc.text("Resumo",14,y);doc.autoTable({startY:y+3,head:[["Sócio","Qtd","% Qtde","Valor R$","% Valor"]],body:[["Ana",s.ac,pct(s.ac,s.tc),brl(s.av),pct(s.av,s.tv)],["Flávio",s.fc,pct(s.fc,s.tc),brl(s.fv),pct(s.fv,s.tv)],["Total",s.tc,"100%",brl(s.tv),"100%"]],styles:{fontSize:8}});return doc;}
+  $("exportPDF").onclick=()=>{if(!filtered.length)return alert("Nenhum dado para exportar.");makePDF(activeFilter?`Relatório - ${activeFilter}`:"Relatório de Processos",filtered).save("relatorio-processos.pdf");};
+  $("exportXLSX").onclick=()=>{if(!filtered.length)return alert("Nenhum dado para exportar.");const cols=reportCols(),rows=filtered.map(r=>Object.fromEntries(cols.map(c=>[c,r[c]??""]))),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows,{header:cols}),"Dados");XLSX.writeFile(wb,"relatorio-processos.xlsx");};
 
-  function closeTips() {
-    tipsDialog.hidden = true;
-    document.body.classList.remove("modal-open");
-    tipsBtn.setAttribute("aria-expanded", "false");
-    if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
-  }
+  async function loadJSZip(){if(window.JSZip)return;await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=resolve;s.onerror=()=>reject(Error("Falha ao carregar JSZip"));document.head.appendChild(s);});}
+  packageBtn.onclick=async()=>{if(!batchDone)return alert("Execute os sorteios do lote primeiro.");try{await loadJSZip();const zip=new JSZip(),reports=[["EP","EP"],["ED","ED"],["EF","EF"],["IMPROCEDENTE","IMPROCEDENTE"],["ALEATORIO","ALEATORIO SORTEADO"],["NADJA","NADJA-ANA"],["NADJA/FLAVIO","NADJA-FLAVIO"],["COMPROMETIDO","COMPROMETIDO FLAVIO"],["FLAVIO","CLIENTES FLAVIO"],["ANA","CLIENTE ANA PAULA"]];for(const [g,n] of reports){const rows=groupRows(g);if(rows.length)zip.file(`${n}.pdf`,makePDF(n,rows).output("arraybuffer"));}zip.file("RESUMO CONSOLIDADO.pdf",makePDF("Resumo Consolidado",master).output("arraybuffer"));const blob=await zip.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`Relatorios_Sorteio_${new Date().toISOString().slice(0,10)}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(err){alert(`Erro ao gerar relatórios: ${err.message}`);}};
 
-  tipsBtn.addEventListener("click", openTips);
-  tipsCloseBtn.addEventListener("click", closeTips);
-  tipsCloseFooterBtn.addEventListener("click", closeTips);
-  tipsDialog.addEventListener("click", (event) => {
-    if (event.target.hasAttribute("data-close-tips")) closeTips();
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !tipsDialog.hidden) closeTips();
-  });
-
-  downloadModelBtn.addEventListener("click", () => {
-    if (!window.XLSX) {
-      alert("Não foi possível carregar o gerador do modelo Excel.");
-      return;
-    }
-
-    const headers = [[
-      "Cliente",
-      "Número de CNJ",
-      "Tipo",
-      "Valor da causa",
-      "Última Decisão",
-      "Sócio a gerir",
-      "Critério"
-    ]];
-    const modelSheet = XLSX.utils.aoa_to_sheet(headers);
-    modelSheet["!cols"] = [
-      { wch: 28 },
-      { wch: 27 },
-      { wch: 14 },
-      { wch: 18 },
-      { wch: 25 },
-      { wch: 20 },
-      { wch: 24 }
-    ];
-
-    const instructions = [
-      ["INSTRUÇÕES DO MODELO"],
-      ["1. Preencha os dados na aba MODELO_UPLOAD, a partir da linha 2."],
-      ["2. Não altere os nomes dos sete cabeçalhos."],
-      ["3. Deixe Sócio a gerir em branco para os processos que participarão do sorteio."],
-      ["4. O aplicativo lê somente a primeira aba do arquivo."],
-      ["5. Salve o arquivo no formato .xlsx antes de importá-lo."]
-    ];
-    const instructionsSheet = XLSX.utils.aoa_to_sheet(instructions);
-    instructionsSheet["!cols"] = [{ wch: 100 }];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, modelSheet, "MODELO_UPLOAD");
-    XLSX.utils.book_append_sheet(workbook, instructionsSheet, "INSTRUÇÕES");
-    XLSX.writeFile(workbook, "Modelo_Planilha_Filtro_Sorteio_Processual.xlsx");
-  });
-
-  excelFile.addEventListener("change", (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => {
-      try {
-        const data = new Uint8Array(loadEvent.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        originalData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        filteredData = [...originalData];
-        activeFilter = "";
-        saveData();
-        renderTable(filteredData);
-        atualizarResumo(filteredData);
-      } catch (error) {
-        alert(`Erro ao ler planilha: ${error.message}`);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-
-  function renderTable(data) {
-    headerRow.innerHTML = "";
-    tableBody.innerHTML = "";
-    if (!data.length) return;
-
-    const columns = Object.keys(data[0]);
-    const selectionHeader = document.createElement("th");
-    const selectAllCheckbox = document.createElement("input");
-    selectAllCheckbox.type = "checkbox";
-    selectAllCheckbox.setAttribute("aria-label", "Selecionar todas as linhas");
-    selectionHeader.appendChild(selectAllCheckbox);
-    headerRow.appendChild(selectionHeader);
-
-    columns.forEach((column) => {
-      const th = document.createElement("th");
-      th.textContent = column;
-      headerRow.appendChild(th);
-    });
-
-    data.forEach((row, index) => {
-      const tr = document.createElement("tr");
-      const selectionCell = document.createElement("td");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "rowCheckbox";
-      checkbox.dataset.index = index;
-      checkbox.setAttribute("aria-label", `Selecionar linha ${index + 1}`);
-      selectionCell.appendChild(checkbox);
-      tr.appendChild(selectionCell);
-
-      columns.forEach((column) => {
-        const td = document.createElement("td");
-        td.textContent = column === "Valor da causa" ? formatBRL(row[column]) : row[column];
-        tr.appendChild(td);
-      });
-      tableBody.appendChild(tr);
-    });
-
-    selectAllCheckbox.addEventListener("change", () => {
-      document.querySelectorAll(".rowCheckbox").forEach((checkbox) => {
-        checkbox.checked = selectAllCheckbox.checked;
-      });
-    });
-  }
-
-  applyFilterBtn.addEventListener("click", () => {
-    const selectedFilter = normalize(filterInput.value);
-    const validFilters = [
-      "EP",
-      "ED",
-      "EF",
-      "IMPROCEDENTE",
-      "NADJA",
-      "NADJA/FLAVIO",
-      "COMPROMETIDO",
-      "FLÁVIO",
-      "ANA"
-    ].map(normalize);
-
-    if (!validFilters.includes(selectedFilter)) {
-      alert("Filtro inválido ou não selecionado.");
-      return;
-    }
-
-    filteredData = originalData.filter((row) => {
-      const type = normalize(row["Tipo"]);
-      const lastDecision = normalize(row["Última Decisão"]);
-      const criterion = normalize(row["Critério"]);
-      if (["EP", "ED", "EF"].includes(selectedFilter)) return type === selectedFilter;
-      if (selectedFilter === normalize("IMPROCEDENTE")) return lastDecision === selectedFilter;
-      return criterion.includes(selectedFilter);
-    });
-
-    activeFilter = selectedFilter;
-    renderTable(filteredData);
-    atualizarResumo(filteredData);
-  });
-
-  searchInput.addEventListener("input", () => {
-    const term = normalize(searchInput.value);
-    activeFilter = "";
-    filteredData = originalData.filter((row) =>
-      Object.values(row).some((value) => normalize(value).includes(term))
-    );
-    renderTable(filteredData);
-    atualizarResumo(filteredData);
-  });
-
-  sortAZ.addEventListener("click", () => {
-    filteredData.sort((a, b) =>
-      String(a.Cliente || "").localeCompare(String(b.Cliente || ""), "pt-BR")
-    );
-    renderTable(filteredData);
-  });
-
-  sortZA.addEventListener("click", () => {
-    filteredData.sort((a, b) =>
-      String(b.Cliente || "").localeCompare(String(a.Cliente || ""), "pt-BR")
-    );
-    renderTable(filteredData);
-  });
-
-  selectAllBtn.addEventListener("click", () => {
-    document.querySelectorAll(".rowCheckbox").forEach((checkbox) => {
-      checkbox.checked = true;
-    });
-  });
-
-  deleteSelBtn.addEventListener("click", () => {
-    const selectedIndexes = Array.from(document.querySelectorAll(".rowCheckbox:checked"))
-      .map((checkbox) => Number(checkbox.dataset.index))
-      .sort((a, b) => b - a);
-
-    selectedIndexes.forEach((index) => {
-      const item = filteredData[index];
-      const originalIndex = originalData.indexOf(item);
-      if (originalIndex > -1) originalData.splice(originalIndex, 1);
-      filteredData.splice(index, 1);
-    });
-
-    saveData();
-    renderTable(filteredData);
-    atualizarResumo(filteredData);
-  });
-
-  clearFiltersBtn.addEventListener("click", () => {
-    searchInput.value = "";
-    filterInput.value = "";
-    activeFilter = "";
-    filteredData = [...originalData];
-    renderTable(filteredData);
-    atualizarResumo(filteredData);
-  });
-
-  clearBtn.addEventListener("click", () => {
-    originalData = [];
-    filteredData = [];
-    excelFile.value = "";
-    searchInput.value = "";
-    filterInput.value = "";
-    activeFilter = "";
-    headerRow.innerHTML = "";
-    tableBody.innerHTML = "";
-    localStorage.removeItem(DATA_STORAGE_KEY);
-    atualizarResumo([]);
-  });
-
-  function randomIndex(maxExclusive) {
-    if (maxExclusive <= 1) return 0;
-    const randomValues = new Uint32Array(1);
-    const maximumValidValue = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
-    let randomValue;
-    do {
-      crypto.getRandomValues(randomValues);
-      randomValue = randomValues[0];
-    } while (randomValue >= maximumValidValue);
-    return randomValue % maxExclusive;
-  }
-
-  function shuffle(items) {
-    const shuffledItems = [...items];
-    for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
-      const selectedIndex = randomIndex(index + 1);
-      [shuffledItems[index], shuffledItems[selectedIndex]] = [
-        shuffledItems[selectedIndex],
-        shuffledItems[index]
-      ];
-    }
-    return shuffledItems;
-  }
-
-  drawBtn.addEventListener("click", () => {
-    if (!activeFilter) {
-      alert("Aplique um filtro antes de realizar o sorteio.");
-      return;
-    }
-
-    if (!filteredData.length) {
-      alert("O filtro aplicado não possui processos para sortear.");
-      return;
-    }
-
-    const assignedToAna = filteredData.filter((row) =>
-      normalize(row["Sócio a gerir"]).includes(normalize("ANA"))
-    ).length;
-    const assignedToFlavio = filteredData.filter((row) =>
-      normalize(row["Sócio a gerir"]).includes(normalize("FLÁVIO"))
-    ).length;
-    const unassignedRows = filteredData.filter((row) => {
-      const partner = normalize(row["Sócio a gerir"]);
-      return !partner.includes(normalize("ANA")) && !partner.includes(normalize("FLÁVIO"));
-    });
-
-    if (!unassignedRows.length) {
-      alert("Todos os processos deste filtro já possuem sócio atribuído.");
-      return;
-    }
-
-    const targetFlavio = Math.round(filteredData.length * 0.6);
-    const targetAna = filteredData.length - targetFlavio;
-    let remainingForFlavio = Math.max(0, targetFlavio - assignedToFlavio);
-    let remainingForAna = Math.max(0, targetAna - assignedToAna);
-
-    if (remainingForFlavio + remainingForAna < unassignedRows.length) {
-      const surplus = unassignedRows.length - remainingForFlavio - remainingForAna;
-      if (assignedToFlavio > targetFlavio) {
-        remainingForAna += surplus;
-      } else {
-        remainingForFlavio += surplus;
-      }
-    }
-
-    const shuffledRows = shuffle(unassignedRows);
-    shuffledRows.forEach((row, index) => {
-      row["Sócio a gerir"] = index < remainingForFlavio ? "Flávio" : "Ana";
-    });
-
-    saveData();
-    renderTable(filteredData);
-    atualizarResumo(filteredData);
-
-    const summary = consolidatedSummary(filteredData);
-    alert(
-      `Sorteio concluído para o filtro ${filterInput.value}.\n` +
-      `Flávio: ${summary.flavioCount} processo(s).\n` +
-      `Ana: ${summary.anaCount} processo(s).`
-    );
-  });
-
-  function consolidatedSummary(data) {
-    let anaCount = 0;
-    let anaValue = 0;
-    let flavioCount = 0;
-    let flavioValue = 0;
-
-    data.forEach((row) => {
-      const value = parseBRL(row["Valor da causa"]);
-      const partner = normalize(row["Sócio a gerir"]);
-      if (partner.includes(normalize("ANA"))) {
-        anaCount += 1;
-        anaValue += value;
-      } else if (partner.includes(normalize("FLÁVIO"))) {
-        flavioCount += 1;
-        flavioValue += value;
-      }
-    });
-
-    return {
-      anaCount,
-      anaValue,
-      flavioCount,
-      flavioValue,
-      totalCount: anaCount + flavioCount,
-      totalValue: anaValue + flavioValue
-    };
-  }
-
-  exportPDFBtn.addEventListener("click", () => {
-    if (!filteredData.length) {
-      alert("Nenhum dado para exportar.");
-      return;
-    }
-
-    const doc = new jspdf.jsPDF({ orientation: "landscape" });
-    const columns = Object.keys(filteredData[0]);
-    doc.autoTable({
-      head: [columns],
-      body: filteredData.map((row) => columns.map((column) => row[column]))
-    });
-
-    const summary = consolidatedSummary(filteredData);
-    const y = doc.lastAutoTable.finalY + 10;
-    doc.text("Resumo Consolidado por Sócio", 14, y);
-    doc.autoTable({
-      startY: y + 6,
-      head: [["Sócio", "Qtd", "% qtd", "Valor", "% valor"]],
-      body: [
-        [
-          "Ana",
-          summary.anaCount,
-          percent(summary.anaCount, filteredData.length),
-          formatBRL(summary.anaValue),
-          percent(summary.anaValue, summary.totalValue)
-        ],
-        [
-          "Flávio",
-          summary.flavioCount,
-          percent(summary.flavioCount, filteredData.length),
-          formatBRL(summary.flavioValue),
-          percent(summary.flavioValue, summary.totalValue)
-        ],
-        ["Total Geral", filteredData.length, "100%", formatBRL(summary.totalValue), "100%"]
-      ]
-    });
-    doc.save("relatorio-processos.pdf");
-  });
-
-  exportXLSXBtn.addEventListener("click", () => {
-    if (!filteredData.length) {
-      alert("Nenhum dado para exportar.");
-      return;
-    }
-
-    const dataSheet = XLSX.utils.json_to_sheet(filteredData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, dataSheet, "Dados");
-
-    const summary = consolidatedSummary(filteredData);
-    const summaryData = [
-      ["Sócio", "Qtd", "% qtd", "Valor", "% valor"],
-      [
-        "Ana",
-        summary.anaCount,
-        percent(summary.anaCount, filteredData.length),
-        formatBRL(summary.anaValue),
-        percent(summary.anaValue, summary.totalValue)
-      ],
-      [
-        "Flávio",
-        summary.flavioCount,
-        percent(summary.flavioCount, filteredData.length),
-        formatBRL(summary.flavioValue),
-        percent(summary.flavioValue, summary.totalValue)
-      ],
-      ["Total Geral", filteredData.length, "100%", formatBRL(summary.totalValue), "100%"]
-    ];
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
-    XLSX.writeFile(workbook, "relatorio-processos.xlsx");
-  });
-
-  function atualizarResumo(data) {
-    const summary = consolidatedSummary(data);
-    document.getElementById("qtdAna").textContent = summary.anaCount;
-    document.getElementById("percentAna").textContent = percent(summary.anaCount, summary.totalCount);
-    document.getElementById("valorAna").textContent = formatBRL(summary.anaValue);
-    document.getElementById("percentValorAna").textContent = percent(summary.anaValue, summary.totalValue);
-    document.getElementById("qtdFlavio").textContent = summary.flavioCount;
-    document.getElementById("percentFlavio").textContent = percent(summary.flavioCount, summary.totalCount);
-    document.getElementById("valorFlavio").textContent = formatBRL(summary.flavioValue);
-    document.getElementById("percentValorFlavio").textContent = percent(summary.flavioValue, summary.totalValue);
-    document.getElementById("qtdTotal").textContent = summary.totalCount;
-    document.getElementById("valorTotal").textContent = formatBRL(summary.totalValue);
-  }
-
-  restoreData();
+  function reset(){master=[];filtered=[];available=[];selected=[...DEFAULT_COLS];activeFilter="";batchDone=false;$("excelFile").value=$("searchInput").value=$("filterInput").value="";$("headerRow").innerHTML=$("tableBody").innerHTML="";colBtn.disabled=previewBtn.disabled=packageBtn.disabled=true;summaryUI([]);}
+  $("clearBtn").onclick=reset;
 });
