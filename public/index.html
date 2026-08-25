@@ -38,19 +38,19 @@
       <input type="text" id="searchInput" placeholder="Buscar..." class="input-text" aria-label="Buscar processos">
 
       <label for="filterInput">Filtro:</label>
-      <input list="filterList" id="filterInput" class="input-text" placeholder="Digite ou escolha...">
-      <datalist id="filterList">
-        <option value="Aleatório"></option>
-        <option value="ANA"></option>
-        <option value="COMPROMETIDO"></option>
-        <option value="ED"></option>
-        <option value="EF"></option>
-        <option value="EP"></option>
-        <option value="FLÁVIO"></option>
-        <option value="Improcedente"></option>
-        <option value="NADJA"></option>
-        <option value="NADJA/FLÁVIO"></option>
-      </datalist>
+      <select id="filterInput" class="input-text" aria-label="Escolher filtro">
+        <option value="">Escolha...</option>
+        <option value="Aleatório">Aleatório</option>
+        <option value="ANA">ANA</option>
+        <option value="COMPROMETIDO">COMPROMETIDO</option>
+        <option value="ED">ED</option>
+        <option value="EF">EF</option>
+        <option value="EP">EP</option>
+        <option value="FLÁVIO">FLÁVIO</option>
+        <option value="Improcedente">Improcedente</option>
+        <option value="NADJA">NADJA</option>
+        <option value="NADJA/FLÁVIO">NADJA/FLÁVIO</option>
+      </select>
 
       <button id="applyFilterBtn" class="btn btn-amarelo" type="button">Aplicar Filtro</button>
       <button id="clearFiltersBtn" class="btn btn-amarelo" type="button">Limpar Filtros</button>
