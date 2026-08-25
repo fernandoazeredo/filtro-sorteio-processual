@@ -2,9 +2,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const THEME_STORAGE_KEY = "filtroSorteioProcessual.theme.v1";
   const REQUIRED = ["Cliente","Número de CNJ","Tipo","Valor da causa","Última Decisão","Critério"];
   const DEFAULT_COLS = [...REQUIRED,"Sócio a gerir","Sorteado Para"];
-  const RANDOM_GROUPS = ["IMPROCEDENTE","EF","ED","EP","ALEATORIO"];
-  const FIXED_GROUPS = ["ANA","FLAVIO","NADJA/FLAVIO","NADJA","COMPROMETIDO"];
-  const PRIORITY = [...FIXED_GROUPS,"IMPROCEDENTE","EF","ED","EP"];
+  const RANDOM_GROUPS = ["COMPROMETIDO","IMPROCEDENTE","EF","ED","EP","ALEATORIO"];
+  const FIXED_GROUPS = ["ANA","FLAVIO","NADJA/FLAVIO","NADJA"];
+  const PRIORITY = [...FIXED_GROUPS,"COMPROMETIDO","IMPROCEDENTE","EF","ED","EP"];
   let master=[], filtered=[], available=[], selected=[...DEFAULT_COLS], activeFilter="", batchDone=false, groupMap=new Map(), duplicateCount=0;
   const $=id=>document.getElementById(id);
   const norm=v=>String(v??"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toUpperCase().replace(/\s+/g," ").trim();
@@ -26,7 +26,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("themeToggle").onclick=()=>{const n=document.documentElement.dataset.theme==="dark"?"light":"dark";setTheme(n);localStorage.setItem(THEME_STORAGE_KEY,n);};
 
   const tips=$("tipsDialog");const closeTips=()=>{tips.hidden=true;document.body.classList.remove("modal-open");};$("tipsBtn").onclick=()=>{tips.hidden=false;document.body.classList.add("modal-open");};$("tipsCloseBtn").onclick=closeTips;$("tipsCloseFooterBtn").onclick=closeTips;tips.addEventListener("click",e=>{if(e.target.hasAttribute("data-close-tips"))closeTips();});
-  const tc=tips.querySelector(".tips-content");if(tc)tc.innerHTML=`<p class="tips-intro">O App trabalha com a planilha recebida do Jurídico sem usar os nomes antigos dos sócios para o sorteio.</p><section class="tips-step"><h3><span>1</span> Importe e escolha as colunas</h3><ol><li>Faça upload do .xlsx completo.</li><li><strong>Sorteado Para</strong> é criada automaticamente e começa vazia.</li><li><strong>Sócio a gerir</strong> permanece apenas como informação de origem.</li></ol></section><section class="tips-step"><h3><span>2</span> Filtre antes de sortear</h3><ol><li>Os grupos fixos são separados primeiro.</li><li>Depois são separados Improcedente, EF, ED e EP.</li><li>Todo processo válido restante entra automaticamente em <strong>Aleatório</strong>.</li><li>Assim nenhum processo fica sem grupo e nenhum processo é sorteado duas vezes.</li></ol></section><section class="tips-step"><h3><span>3</span> Regra equilibrada 60/40</h3><ol><li>O cálculo é feito <strong>separadamente dentro de cada filtro</strong>.</li><li>A quantidade mantém a cota mais próxima de 60% para Flávio e 40% para Ana.</li><li>Dentro dessa cota, o algoritmo considera também o <strong>Valor da causa</strong>, buscando aproximar o valor total de 60/40.</li><li>Processos de maior valor são avaliados primeiro para reduzir desequilíbrios monetários.</li></ol></section>`;
+  const tc=tips.querySelector(".tips-content");if(tc)tc.innerHTML=`<p class="tips-intro">O App trabalha com a planilha recebida do Jurídico sem usar os nomes antigos dos sócios para o sorteio.</p><section class="tips-step"><h3><span>1</span> Importe e escolha as colunas</h3><ol><li>Faça upload do .xlsx completo.</li><li><strong>Sorteado Para</strong> é criada automaticamente e começa vazia.</li><li><strong>Sócio a gerir</strong> permanece apenas como informação de origem e não influencia o resultado.</li></ol></section><section class="tips-step"><h3><span>2</span> Classificação antes da distribuição</h3><ol><li>Os grupos direcionados permanecem separados: Cliente Ana Paula e NADJA/Ana vão para Ana; Cliente Flávio e NADJA/Flávio vão para Flávio.</li><li><strong>Comprometido, Improcedente, EF, ED e EP</strong> são separados antes do Aleatório.</li><li>Todo processo válido restante entra automaticamente em <strong>Aleatório</strong>.</li><li>Cada processo entra em apenas um grupo operacional.</li></ol></section><section class="tips-step"><h3><span>3</span> Regra equilibrada 60/40</h3><ol><li>Nos grupos <strong>Comprometido, Improcedente, EF, ED, EP e Aleatório</strong>, a distribuição é feita separadamente por filtro.</li><li>A quantidade busca a cota mais próxima de <strong>60% para Flávio e 40% para Ana</strong>.</li><li>Dentro dessa cota, o algoritmo considera também o <strong>Valor da causa</strong>, buscando deixar o valor total também o mais próximo possível de 60/40.</li><li>Processos de maior valor são avaliados primeiro para reduzir desequilíbrios monetários.</li></ol><div class="tips-note"><strong>Importante:</strong> Comprometido não é mais fixo para Flávio. Ele segue a mesma regra 60/40 por quantidade + valor aplicada aos demais grupos sorteáveis.</div></section><section class="tips-step"><h3><span>4</span> Conferência e auditoria</h3><ol><li>Use <strong>Conferir Grupos</strong> antes de executar.</li><li>Confirme que todos os processos únicos estão classificados e que <strong>Fora dos grupos = 0</strong>.</li><li>Após a execução, confira os percentuais de quantidade e valor por grupo antes de baixar os relatórios.</li></ol></section>`;
 
   const controls=document.querySelector(".controls"),colBtn=document.createElement("button"),previewBtn=document.createElement("button"),packageBtn=document.createElement("button");
   colBtn.className="btn btn-roxo";colBtn.type="button";colBtn.textContent="Escolher Colunas";colBtn.disabled=true;previewBtn.className="btn btn-amarelo";previewBtn.type="button";previewBtn.textContent="Conferir Grupos";previewBtn.disabled=true;packageBtn.className="btn btn-azul";packageBtn.type="button";packageBtn.textContent="Baixar Relatórios do Lote";packageBtn.disabled=true;controls.insertBefore(colBtn,$("applyFilterBtn"));controls.insertBefore(previewBtn,$("applyFilterBtn"));controls.appendChild(packageBtn);$("drawBtn").textContent="Executar Todos os Sorteios";
@@ -38,30 +38,25 @@ window.addEventListener("DOMContentLoaded", () => {
   function buildGroups(){groupMap=new Map([...FIXED_GROUPS,...RANDOM_GROUPS].map(g=>[g,[]]));for(const r of master){const specific=PRIORITY.find(g=>rawMatch(r,g));const g=specific||"ALEATORIO";r.__group=g;groupMap.get(g).push(r);}}
   const groupRows=g=>groupMap.get(g)||[];
   const clearAssignments=()=>master.forEach(r=>r["Sorteado Para"]="");
-  function assignFixed(){groupRows("ANA").forEach(r=>r["Sorteado Para"]="Ana");groupRows("NADJA").forEach(r=>r["Sorteado Para"]="Ana");["FLAVIO","NADJA/FLAVIO","COMPROMETIDO"].forEach(g=>groupRows(g).forEach(r=>r["Sorteado Para"]="Flávio"));}
+  function assignFixed(){groupRows("ANA").forEach(r=>r["Sorteado Para"]="Ana");groupRows("NADJA").forEach(r=>r["Sorteado Para"]="Ana");["FLAVIO","NADJA/FLAVIO"].forEach(g=>groupRows(g).forEach(r=>r["Sorteado Para"]="Flávio"));}
   function quota(rows){const flavio=Math.round(rows.length*.60);return{flavio,ana:rows.length-flavio};}
 
   function assignRandom(g){
     const p=groupRows(g).filter(r=>!partner(r));
     if(!p.length)return 0;
-
     const q=quota(p);
     const totalValue=p.reduce((sum,r)=>sum+Math.max(0,parseBRL(r["Valor da causa"])),0);
     const ordered=[...p].sort((a,b)=>Math.max(0,parseBRL(b["Valor da causa"]))-Math.max(0,parseBRL(a["Valor da causa"]))||String(a.Cliente||"").localeCompare(String(b.Cliente||""),"pt-BR"));
-
     let fCount=0,aCount=0,fValue=0,processedValue=0;
     const target=.60;
-
     for(let i=0;i<ordered.length;i++){
       const r=ordered[i];
       const value=Math.max(0,parseBRL(r["Valor da causa"]));
       const processedCount=i+1;
       processedValue+=value;
-
       const mustFlavio=aCount>=q.ana;
       const mustAna=fCount>=q.flavio;
       let toFlavio;
-
       if(mustFlavio)toFlavio=true;
       else if(mustAna)toFlavio=false;
       else{
@@ -73,13 +68,9 @@ window.addEventListener("DOMContentLoaded", () => {
           toFlavio=Math.abs(finalValueIfF-totalValue*target)<=Math.abs(finalValueIfA-totalValue*target);
         }else toFlavio=scoreFlavio<scoreAna;
       }
-
       if(toFlavio){r["Sorteado Para"]="Flávio";fCount++;fValue+=value;}
       else{r["Sorteado Para"]="Ana";aCount++;}
     }
-
-    // Refinamento local: mantém exatamente a mesma quantidade e troca pares
-    // somente quando a troca aproxima o valor de Flávio da meta de 60%.
     const targetValue=totalValue*target;
     let improved=true,passes=0;
     while(improved&&passes<3){
@@ -99,7 +90,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       if(best){best.fr["Sorteado Para"]="Ana";best.ar["Sorteado Para"]="Flávio";fValue=best.newValue;improved=true;}
     }
-
     return p.length;
   }
 
@@ -107,9 +97,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   colBtn.onclick=()=>{if(!available.length)return;const numbered=available.map((c,i)=>`${i+1}. ${c}${REQUIRED.includes(c)?" [essencial]":c==="Sócio a gerir"?" [origem]":""}`).join("\n"),defaults=selected.map(c=>available.indexOf(c)+1).filter(n=>n>0).join(","),ans=prompt(`Escolha as colunas que aparecerão na tela e nos relatórios.\n\nDigite os números separados por vírgula.\n\n${numbered}`,defaults);if(ans===null)return;const nums=ans.split(/[,;\s]+/).map(Number).filter(n=>Number.isInteger(n)&&n>=1&&n<=available.length);selected=available.filter((c,i)=>nums.includes(i+1)||REQUIRED.includes(c));if(!selected.includes("Sorteado Para"))selected.push("Sorteado Para");render(filtered);modal("Colunas selecionadas",`<p>${selected.length} colunas serão exibidas nos relatórios.</p>`);};
 
-  const labels={IMPROCEDENTE:"Improcedente",EF:"EF",ED:"ED",EP:"EP",ALEATORIO:"Aleatório",NADJA:"NADJA/Ana","NADJA/FLAVIO":"NADJA/Flávio",COMPROMETIDO:"Comprometido",FLAVIO:"Cliente Flávio",ANA:"Cliente Ana Paula"};
-  function groupStats(g){const data=groupRows(g),s=sum(data),q=quota(data);return{data,s,q,totalValue:data.reduce((a,r)=>a+Math.max(0,parseBRL(r["Valor da causa"])),0)};}
-  function previewHtml(){let rows="";for(const g of [...FIXED_GROUPS,...RANDOM_GROUPS]){const data=groupRows(g),isRandom=RANDOM_GROUPS.includes(g),rule=isRandom?"60/40 qtd.+valor":(["ANA","NADJA"].includes(g)?"Ana":"Flávio"),q=isRandom?quota(data):null;rows+=`<tr><td>${labels[g]}</td><td>${data.length}</td><td>${rule}</td><td>${q?`${q.flavio} Flávio / ${q.ana} Ana`:rule}</td></tr>`;}const grouped=[...groupMap.values()].reduce((a,b)=>a+b.length,0),outside=master.length-grouped;return`<table><thead><tr><th>Grupo</th><th>Qtd.</th><th>Regra</th><th>Cota de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Processos únicos:</strong> ${master.length}<br><strong>Classificados:</strong> ${grouped}<br><strong>Fora dos grupos:</strong> ${outside}<br><strong>Duplicidades consolidadas:</strong> ${duplicateCount}</p>${outside===0?'<p class="fsp-ok"><strong>Auditoria OK:</strong> nenhum processo ficará sem atribuição.</p>':'<p class="fsp-warn"><strong>Atenção:</strong> existem processos sem grupo. O processamento foi bloqueado.</p>'}<p>Nos grupos sorteáveis, a quantidade mantém a cota 60/40 e a escolha dos processos é otimizada para aproximar também o <strong>valor da causa</strong> de 60/40.</p>`;}
+  const labels={COMPROMETIDO:"Comprometido",IMPROCEDENTE:"Improcedente",EF:"EF",ED:"ED",EP:"EP",ALEATORIO:"Aleatório",NADJA:"NADJA/Ana","NADJA/FLAVIO":"NADJA/Flávio",FLAVIO:"Cliente Flávio",ANA:"Cliente Ana Paula"};
+  function previewHtml(){let rows="";for(const g of [...FIXED_GROUPS,...RANDOM_GROUPS]){const data=groupRows(g),isRandom=RANDOM_GROUPS.includes(g),rule=isRandom?"60/40 qtd.+valor":(["ANA","NADJA"].includes(g)?"Ana":"Flávio"),q=isRandom?quota(data):null;rows+=`<tr><td>${labels[g]}</td><td>${data.length}</td><td>${rule}</td><td>${q?`${q.flavio} Flávio / ${q.ana} Ana`:rule}</td></tr>`;}const grouped=[...groupMap.values()].reduce((a,b)=>a+b.length,0),outside=master.length-grouped;return`<table><thead><tr><th>Grupo</th><th>Qtd.</th><th>Regra</th><th>Cota de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Processos únicos:</strong> ${master.length}<br><strong>Classificados:</strong> ${grouped}<br><strong>Fora dos grupos:</strong> ${outside}<br><strong>Duplicidades consolidadas:</strong> ${duplicateCount}</p>${outside===0?'<p class="fsp-ok"><strong>Auditoria OK:</strong> nenhum processo ficará sem atribuição.</p>':'<p class="fsp-warn"><strong>Atenção:</strong> existem processos sem grupo. O processamento foi bloqueado.</p>'}<p>Nos grupos sorteáveis, inclusive <strong>Comprometido</strong>, a quantidade mantém a cota 60/40 e a escolha dos processos é otimizada para aproximar também o <strong>valor da causa</strong> de 60/40.</p>`;}
   previewBtn.onclick=()=>modal("Conferência dos grupos",previewHtml());
 
   function resultHtml(){let rows="";for(const g of RANDOM_GROUPS){const s=sum(groupRows(g));rows+=`<tr><td>${labels[g]}</td><td>${s.fc}</td><td>${pct(s.fc,s.tc)}</td><td>${s.ac}</td><td>${pct(s.ac,s.tc)}</td><td>${pct(s.fv,s.tv)}</td><td>${pct(s.av,s.tv)}</td></tr>`;}return`<table><thead><tr><th>Grupo</th><th>Qtd Flávio</th><th>% Qtd F.</th><th>Qtd Ana</th><th>% Qtd A.</th><th>% Valor F.</th><th>% Valor A.</th></tr></thead><tbody>${rows}</tbody></table>`;}
@@ -127,7 +116,7 @@ window.addEventListener("DOMContentLoaded", () => {
   function makePDF(title,rows){const doc=new jspdf.jsPDF({orientation:"landscape"}),cols=reportCols();doc.setFontSize(13);doc.text(title,14,12);doc.setFontSize(8);doc.text(`Exportado em: ${new Date().toLocaleString("pt-BR")}`,14,18);doc.autoTable({startY:22,head:[cols],body:rows.map(r=>cols.map(c=>c==="Valor da causa"?brl(r[c]):r[c]??"")),styles:{fontSize:6,cellPadding:1.1}});const s=sum(rows),y=doc.lastAutoTable.finalY+7;doc.text("Resumo",14,y);doc.autoTable({startY:y+3,head:[["Sócio","Qtd","% Qtde","Valor R$","% Valor"]],body:[["Ana",s.ac,pct(s.ac,s.tc),brl(s.av),pct(s.av,s.tv)],["Flávio",s.fc,pct(s.fc,s.tc),brl(s.fv),pct(s.fv,s.tv)],["Total",s.tc,"100%",brl(s.tv),"100%"]],styles:{fontSize:8}});return doc;}
   $("exportPDF").onclick=()=>{if(!filtered.length)return modal("Sem dados","<p>Nenhum dado para exportar.</p>");makePDF(activeFilter?`Relatório - ${labels[activeFilter]||activeFilter}`:"Relatório de Processos",filtered).save("relatorio-processos.pdf");};$("exportXLSX").onclick=()=>{if(!filtered.length)return modal("Sem dados","<p>Nenhum dado para exportar.</p>");const cols=reportCols(),rows=filtered.map(r=>Object.fromEntries(cols.map(c=>[c,r[c]??""]))),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows,{header:cols}),"Dados");XLSX.writeFile(wb,"relatorio-processos.xlsx");};
   async function loadJSZip(){if(window.JSZip)return;await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=resolve;s.onerror=()=>reject(Error("Falha ao carregar JSZip"));document.head.appendChild(s);});}
-  packageBtn.onclick=async()=>{if(!batchDone)return modal("Atenção","<p>Execute os sorteios do lote primeiro.</p>");try{await loadJSZip();const zip=new JSZip(),reports=[["IMPROCEDENTE","IMPROCEDENTE"],["EF","EF"],["ED","ED"],["EP","EP"],["ALEATORIO","ALEATORIO SORTEADO"],["NADJA","NADJA-ANA"],["NADJA/FLAVIO","NADJA-FLAVIO"],["COMPROMETIDO","COMPROMETIDO FLAVIO"],["FLAVIO","CLIENTES FLAVIO"],["ANA","CLIENTE ANA PAULA"]];for(const [g,n] of reports){const rows=groupRows(g);if(rows.length)zip.file(`${n}.pdf`,makePDF(n,rows).output("arraybuffer"));}zip.file("RESUMO CONSOLIDADO.pdf",makePDF("Resumo Consolidado",master).output("arraybuffer"));const blob=await zip.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`Relatorios_Sorteio_${new Date().toISOString().slice(0,10)}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(err){modal("Erro ao gerar relatórios",`<p>${esc(err.message)}</p>`);}};
+  packageBtn.onclick=async()=>{if(!batchDone)return modal("Atenção","<p>Execute os sorteios do lote primeiro.</p>");try{await loadJSZip();const zip=new JSZip(),reports=[["COMPROMETIDO","COMPROMETIDO"],["IMPROCEDENTE","IMPROCEDENTE"],["EF","EF"],["ED","ED"],["EP","EP"],["ALEATORIO","ALEATORIO SORTEADO"],["NADJA","NADJA-ANA"],["NADJA/FLAVIO","NADJA-FLAVIO"],["FLAVIO","CLIENTES FLAVIO"],["ANA","CLIENTE ANA PAULA"]];for(const [g,n] of reports){const rows=groupRows(g);if(rows.length)zip.file(`${n}.pdf`,makePDF(n,rows).output("arraybuffer"));}zip.file("RESUMO CONSOLIDADO.pdf",makePDF("Resumo Consolidado",master).output("arraybuffer"));const blob=await zip.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`Relatorios_Sorteio_${new Date().toISOString().slice(0,10)}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(err){modal("Erro ao gerar relatórios",`<p>${esc(err.message)}</p>`);}};
   function reset(){master=[];filtered=[];available=[];selected=[...DEFAULT_COLS];activeFilter="";batchDone=false;groupMap=new Map();duplicateCount=0;$("excelFile").value=$("searchInput").value=$("filterInput").value="";$("headerRow").innerHTML=$("tableBody").innerHTML="";colBtn.disabled=previewBtn.disabled=packageBtn.disabled=true;summaryUI([]);}
   $("clearBtn").onclick=reset;
 });
