@@ -2,6 +2,8 @@
 
 Aplicativo estático para importar planilhas Excel, buscar e filtrar processos, sortear 60% para Flávio e 40% para Ana, ordenar clientes, selecionar ou excluir registros e exportar os resultados em PDF ou Excel. O resumo consolidado apresenta quantidade, percentual e valor total por sócio.
 
+O botão **Dicas** apresenta dentro do aplicativo o passo a passo completo, o modelo visual dos sete cabeçalhos necessários e a opção de baixar um arquivo Excel vazio já preparado para a importação.
+
 ## Estrutura
 
 - `public/index.html`: interface do aplicativo.
@@ -18,6 +20,14 @@ O aplicativo não utiliza Firebase Authentication, Firestore, Realtime Database 
 ## Regra do sorteio
 
 O sorteio é habilitado depois da aplicação de um filtro. A distribuição é feita aleatoriamente, por quantidade, com 60% dos processos para Flávio e 40% para Ana. Atribuições existentes na coluna `Sócio a gerir` são preservadas, e apenas os processos ainda não atribuídos participam do sorteio.
+
+## Modelo de planilha
+
+A primeira aba do arquivo `.xlsx` deve possuir estes cabeçalhos exatos na primeira linha:
+
+`Cliente`, `Número de CNJ`, `Tipo`, `Valor da causa`, `Última Decisão`, `Sócio a gerir` e `Critério`.
+
+O resultado do sorteio é gravado diretamente em `Sócio a gerir`; a coluna antiga `Sorteado Para` não é necessária.
 
 Dependências públicas mantidas para as funcionalidades originais:
 
