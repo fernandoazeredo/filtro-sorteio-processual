@@ -10,20 +10,20 @@
     "trailingSlash": false,
     "headers": [
       {
-        "source": "**/*.@(css|js|svg)",
+        "source": "**/*.@(html|css|js)",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public,max-age=3600"
+            "value": "no-store, no-cache, must-revalidate, max-age=0"
           }
         ]
       },
       {
-        "source": "**/*.html",
+        "source": "**/*.svg",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "public,max-age=3600"
           }
         ]
       }
