@@ -24,6 +24,13 @@ window.addEventListener("DOMContentLoaded", () => {
   const exportXLSXBtn = document.getElementById("exportXLSX");
   const themeToggle = document.getElementById("themeToggle");
   const themeLabel = document.getElementById("themeLabel");
+  const tipsBtn = document.getElementById("tipsBtn");
+  const tipsDialog = document.getElementById("tipsDialog");
+  const tipsPanel = tipsDialog.querySelector(".tips-panel");
+  const tipsCloseBtn = document.getElementById("tipsCloseBtn");
+  const tipsCloseFooterBtn = document.getElementById("tipsCloseFooterBtn");
+  const downloadModelBtn = document.getElementById("downloadModelBtn");
+  let lastFocusedElement = null;
 
   const normalize = (str) =>
     String(str ?? "")
@@ -95,6 +102,75 @@ window.addEventListener("DOMContentLoaded", () => {
     const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     setTheme(nextTheme);
     localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  });
+
+  function openTips() {
+    lastFocusedElement = document.activeElement;
+    tipsDialog.hidden = false;
+    document.body.classList.add("modal-open");
+    tipsBtn.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => tipsPanel.focus());
+  }
+
+  function closeTips() {
+    tipsDialog.hidden = true;
+    document.body.classList.remove("modal-open");
+    tipsBtn.setAttribute("aria-expanded", "false");
+    if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
+  }
+
+  tipsBtn.addEventListener("click", openTips);
+  tipsCloseBtn.addEventListener("click", closeTips);
+  tipsCloseFooterBtn.addEventListener("click", closeTips);
+  tipsDialog.addEventListener("click", (event) => {
+    if (event.target.hasAttribute("data-close-tips")) closeTips();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !tipsDialog.hidden) closeTips();
+  });
+
+  downloadModelBtn.addEventListener("click", () => {
+    if (!window.XLSX) {
+      alert("Não foi possível carregar o gerador do modelo Excel.");
+      return;
+    }
+
+    const headers = [[
+      "Cliente",
+      "Número de CNJ",
+      "Tipo",
+      "Valor da causa",
+      "Última Decisão",
+      "Sócio a gerir",
+      "Critério"
+    ]];
+    const modelSheet = XLSX.utils.aoa_to_sheet(headers);
+    modelSheet["!cols"] = [
+      { wch: 28 },
+      { wch: 27 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 24 }
+    ];
+
+    const instructions = [
+      ["INSTRUÇÕES DO MODELO"],
+      ["1. Preencha os dados na aba MODELO_UPLOAD, a partir da linha 2."],
+      ["2. Não altere os nomes dos sete cabeçalhos."],
+      ["3. Deixe Sócio a gerir em branco para os processos que participarão do sorteio."],
+      ["4. O aplicativo lê somente a primeira aba do arquivo."],
+      ["5. Salve o arquivo no formato .xlsx antes de importá-lo."]
+    ];
+    const instructionsSheet = XLSX.utils.aoa_to_sheet(instructions);
+    instructionsSheet["!cols"] = [{ wch: 100 }];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, modelSheet, "MODELO_UPLOAD");
+    XLSX.utils.book_append_sheet(workbook, instructionsSheet, "INSTRUÇÕES");
+    XLSX.writeFile(workbook, "Modelo_Planilha_Filtro_Sorteio_Processual.xlsx");
   });
 
   excelFile.addEventListener("change", (event) => {
