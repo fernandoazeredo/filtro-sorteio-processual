@@ -191,9 +191,30 @@ window.addEventListener("DOMContentLoaded", () => {
     await new Promise((resolve,reject)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=resolve;s.onerror=()=>reject(Error("Falha ao carregar JSZip"));document.head.appendChild(s);});
   }
 
+  async function readCompleteAssignedDataset() {
+    const filterInput = document.getElementById("filterInput");
+    const searchInput = document.getElementById("searchInput");
+    const previousFilter = filterInput?.value ?? "";
+    const previousSearch = searchInput?.value ?? "";
+
+    document.getElementById("clearFiltersBtn")?.click();
+    await new Promise(resolve => setTimeout(resolve, 140));
+    const rows = readTableRows().map(r => ({...r}));
+
+    if (previousFilter && filterInput) {
+      filterInput.value = previousFilter;
+      document.getElementById("applyFilterBtn")?.click();
+    } else if (previousSearch && searchInput) {
+      searchInput.value = previousSearch;
+      searchInput.dispatchEvent(new Event("input", {bubbles:true}));
+    }
+
+    return rows;
+  }
+
   async function downloadPackage() {
-    const rows = fullAssignedRows.length ? fullAssignedRows : readTableRows();
-    if (!isFullyAssigned(rows)) return alert("Execute os sorteios antes de gerar os relatórios do lote.");
+    const rows = await readCompleteAssignedDataset();
+    if (!isFullyAssigned(rows)) return alert("Execute os sorteios de todos os filtros antes de gerar os relatórios do lote.");
     await loadJSZip();
     const zip = new JSZip();
     const reports = [["COMPROMETIDO","COMPROMETIDO"],["IMPROCEDENTE","IMPROCEDENTE"],["EF","EF"],["ED","ED"],["EP","EP"],["ALEATORIO","ALEATORIO SORTEADO"],["NADJA","NADJA-ANA"],["NADJA/FLAVIO","NADJA-FLAVIO"],["FLAVIO","CLIENTES FLAVIO"],["ANA","CLIENTE ANA PAULA"]];
@@ -201,7 +222,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const part = rows.filter(r => classify(r) === g);
       if (part.length) zip.file(`${n}.pdf`, makePartnerPDF(n, part).output("arraybuffer"));
     }
-    zip.file("RESUMO CONSOLIDADO.pdf", makePartnerPDF("Resumo Consolidado", rows).output("arraybuffer"));
+    zip.file("RESUMO CONSOLIDADO.pdf", makePartnerPDF("Resumo Consolidado do Lote", rows).output("arraybuffer"));
     const blob=await zip.generateAsync({type:"blob"}), url=URL.createObjectURL(blob), a=document.createElement("a");
     a.href=url; a.download=`Relatorios_Sorteio_${new Date().toISOString().slice(0,10)}.zip`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
