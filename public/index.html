@@ -7,13 +7,13 @@
   <meta name="color-scheme" content="light dark">
   <title>Gerenciamento de Processos</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=20260826-0945">
-  <link rel="stylesheet" href="report-view.css?v=20260826-0945">
+  <link rel="stylesheet" href="style.css?v=20260826-1000">
+  <link rel="stylesheet" href="report-view.css?v=20260826-1000">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js" defer></script>
-  <script src="script.js?v=20260826-0945" defer></script>
-  <script src="report-view.js?v=20260826-0945" defer></script>
+  <script src="script.js?v=20260826-1000" defer></script>
+  <script src="report-view.js?v=20260826-1000" defer></script>
 </head>
 <body>
   <main class="container">
@@ -29,7 +29,7 @@
       <select id="filterInput" class="input-text" aria-label="Escolher filtro">
         <option value="">Escolha...</option><option value="Aleatório">Aleatório</option><option value="ANA">Ana</option><option value="COMPROMETIDO">Comprometido</option><option value="ED">ED</option><option value="EF">EF</option><option value="EP">EP</option><option value="FLÁVIO">Flávio</option><option value="Improcedente">Improcedente</option><option value="NADJA">Nadja</option><option value="NADJA/FLÁVIO">Nadja/Flávio</option>
       </select>
-      <button id="applyFilterBtn" class="btn btn-amarelo" type="button">Aplicar Filtro</button><button id="clearFiltersBtn" class="btn btn-amarelo" type="button">Limpar Filtros</button><button id="drawBtn" class="btn btn-sorteio" type="button">Sortear 60% / 40%</button><button id="clearBtn" class="btn btn-laranja" type="button">Limpar Tudo</button><button id="sortAZ" class="btn btn-verde" type="button">A → Z</button><button id="sortZA" class="btn btn-verde" type="button">Z → A</button><button id="selectAllBtn" class="btn btn-roxo" type="button">Selecionar Todos</button><button id="deleteSelBtn" class="btn btn-vermelho" type="button">Excluir Selecionados</button><button id="exportPDF" class="btn btn-azul" type="button">Exportar PDF</button><button id="exportXLSX" class="btn btn-azul" type="button">Exportar Excel</button>
+      <button id="applyFilterBtn" class="btn btn-amarelo" type="button">Aplicar Filtro</button><button id="clearFiltersBtn" class="btn btn-amarelo" type="button">Limpar Filtros</button><button id="drawBtn" class="btn btn-sorteio" type="button">Executar Sorteio por filtro</button><button id="clearBtn" class="btn btn-laranja" type="button">Limpar Tudo</button><button id="sortAZ" class="btn btn-verde" type="button">A → Z</button><button id="sortZA" class="btn btn-verde" type="button">Z → A</button><button id="selectAllBtn" class="btn btn-roxo" type="button">Selecionar Todos</button><button id="deleteSelBtn" class="btn btn-vermelho" type="button">Excluir Selecionados</button><button id="exportPDF" class="btn btn-azul" type="button">Exportar PDF</button><button id="exportXLSX" class="btn btn-azul" type="button">Exportar Excel</button>
     </div>
     <div class="tabela-area" role="region" aria-label="Tabela de processos" tabindex="0"><table id="mainTable"><thead><tr id="headerRow"></tr></thead><tbody id="tableBody"></tbody></table></div>
     <section class="resumo-area" aria-labelledby="resumoTitulo"><h3 id="resumoTitulo">Resumo Consolidado por Sócio</h3><div class="resumo-scroll" role="region" aria-label="Resumo consolidado" tabindex="0"><table class="resumo-tabela"><thead><tr><th>Sócio</th><th>Quantidade</th><th>Percentual (%)</th><th>Valor Total (R$)</th><th>Percentual (%)</th></tr></thead><tbody><tr><td>Ana</td><td id="qtdAna">0</td><td id="percentAna">0%</td><td id="valorAna">R$ 0,00</td><td id="percentValorAna">0%</td></tr><tr><td>Flávio</td><td id="qtdFlavio">0</td><td id="percentFlavio">0%</td><td id="valorFlavio">R$ 0,00</td><td id="percentValorFlavio">0%</td></tr><tr class="linha-total"><td><strong>Total Geral</strong></td><td id="qtdTotal"><strong>0</strong></td><td id="percentTotal"><strong>100%</strong></td><td id="valorTotal"><strong>R$ 0,00</strong></td><td id="percentTotalValor"><strong>100%</strong></td></tr></tbody></table></div></section>
