@@ -129,7 +129,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function addPartnerPDF(doc, name, rows, value, total, totalValue, color) {
-    let y = 14;
+    let y = 22;
     y = addSectionHeader(doc, y, name, rows, value, total, totalValue, color);
     if (!rows.length) { doc.setFontSize(10); doc.text("Nenhum processo neste recorte.", 14, y + 6); return; }
     const cols = pdfColumns(rows);
