@@ -55,7 +55,6 @@
   function currentBaseName() {
     const key = appliedFilter || filterKeyFromValue(document.getElementById("filterInput")?.value);
     const filterName = FILTER_NAMES[key] || "TODOS";
-    // Barra não pode fazer parte de nome de arquivo em Windows; somente nesse caso usamos hífen.
     const safeFilterName = filterName.replace(/\//g, "-");
     return `${sourcePrefix()} - ${safeFilterName}`;
   }
@@ -85,7 +84,7 @@
     if (window.jspdf?.jsPDF?.prototype?.save) {
       const originalPdfSave = window.jspdf.jsPDF.prototype.save;
       window.jspdf.jsPDF.prototype.save = function(filename, options) {
-        if (filename === "relatorio-processos.pdf") {
+        if (filename === "relatorio-processos.pdf" || filename === "relatorio-processos-por-socio.pdf") {
           filename = `${currentBaseName()}.pdf`;
         }
         return originalPdfSave.call(this, filename, options);
@@ -95,7 +94,7 @@
     if (window.XLSX?.writeFile) {
       const originalWriteFile = window.XLSX.writeFile;
       window.XLSX.writeFile = function(workbook, filename, options) {
-        if (filename === "relatorio-processos.xlsx") {
+        if (filename === "relatorio-processos.xlsx" || filename === "relatorio-processos-por-socio.xlsx") {
           filename = `${currentBaseName()}.xlsx`;
         }
         return originalWriteFile.call(this, workbook, filename, options);
