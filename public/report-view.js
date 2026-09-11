@@ -172,6 +172,31 @@ window.addEventListener("DOMContentLoaded", () => {
     return `Relatório - ${name}`;
   }
 
+  function currentExportBaseName() {
+    const fileName = document.getElementById("excelFile")?.files?.[0]?.name || "";
+    const source = norm(fileName).includes("ANTIGOS") ? "PROCESSOS ANTIGOS"
+      : norm(fileName).includes("NOVOS") ? "PROCESSOS NOVOS"
+      : norm(fileName).includes("CONSOLIDAD") ? "PROCESSOS CONSOLIDADOS"
+      : "PROCESSOS";
+
+    const rawFilter = document.getElementById("filterInput")?.value || "";
+    const filterKey = norm(rawFilter);
+    const names = {
+      ALEATORIO: "ALEATÓRIO",
+      ANA: "ANA MULLER",
+      COMPROMETIDO: "COMPROMETIDO",
+      ED: "ED",
+      EF: "EF",
+      EP: "EP",
+      FLAVIO: "FLÁVIO MARQUES",
+      IMPROCEDENTE: "IMPROCEDENTE",
+      NADJA: "NADJA",
+      "NADJA/FLAVIO": "NADJA-FLAVIO"
+    };
+    const filterName = names[filterKey] || "TODOS";
+    return `${source} - ${filterName}`;
+  }
+
   function classify(r) {
     const type=norm(r.Tipo), dec=norm(r["Última Decisão"]), crit=norm(r.Critério);
     if(type==="EF")return"EF";
@@ -233,7 +258,7 @@ window.addEventListener("DOMContentLoaded", () => {
       e.preventDefault(); e.stopImmediatePropagation();
       const rows = readTableRows();
       if (!isFullyAssigned(rows)) return alert("Execute o sorteio antes de exportar o PDF por sócio.");
-      makePartnerPDF(currentReportTitle(), rows).save("relatorio-processos-por-socio.pdf");
+      makePartnerPDF(currentReportTitle(), rows).save(`${currentExportBaseName()}.pdf`);
       return;
     }
     const packageBtn = e.target.closest?.("#packageBtn");
