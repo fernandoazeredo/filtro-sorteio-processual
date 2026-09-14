@@ -10,7 +10,7 @@
     EP: "EP",
     FLAVIO: "FLÁVIO MARQUES",
     IMPROCEDENTE: "IMPROCEDENTE",
-    NADJA: "NADJA",
+    NADJA: "NADJA/ANA",
     "NADJA/FLAVIO": "NADJA/FLAVIO"
   };
 
@@ -47,6 +47,7 @@
       "FLAVIO MARQUES": "FLAVIO",
       "IMPROCEDENTE": "IMPROCEDENTE",
       "NADJA": "NADJA",
+      "NADJA/ANA": "NADJA",
       "NADJA/FLAVIO": "NADJA/FLAVIO"
     };
     return aliases[normalized] || "";
