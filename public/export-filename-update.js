@@ -53,8 +53,12 @@
     return aliases[normalized] || "";
   }
 
+  function activeFilterKey() {
+    return appliedFilter || filterKeyFromValue(document.getElementById("filterInput")?.value);
+  }
+
   function currentBaseName() {
-    const key = appliedFilter || filterKeyFromValue(document.getElementById("filterInput")?.value);
+    const key = activeFilterKey();
     const filterName = FILTER_NAMES[key] || "TODOS";
     const safeFilterName = filterName.replace(/\//g, "-");
     return `${sourcePrefix()} - ${safeFilterName}`;
@@ -85,7 +89,10 @@
     if (window.jspdf?.jsPDF?.prototype?.save) {
       const originalPdfSave = window.jspdf.jsPDF.prototype.save;
       window.jspdf.jsPDF.prototype.save = function(filename, options) {
-        if (filename === "relatorio-processos.pdf" || filename === "relatorio-processos-por-socio.pdf") {
+        const isNadjaAna = activeFilterKey() === "NADJA";
+        if (isNadjaAna && typeof filename === "string" && filename.toLowerCase().endsWith(".pdf")) {
+          filename = `${currentBaseName()}.pdf`;
+        } else if (filename === "relatorio-processos.pdf" || filename === "relatorio-processos-por-socio.pdf") {
           filename = `${currentBaseName()}.pdf`;
         }
         return originalPdfSave.call(this, filename, options);
@@ -95,7 +102,10 @@
     if (window.XLSX?.writeFile) {
       const originalWriteFile = window.XLSX.writeFile;
       window.XLSX.writeFile = function(workbook, filename, options) {
-        if (filename === "relatorio-processos.xlsx" || filename === "relatorio-processos-por-socio.xlsx") {
+        const isNadjaAna = activeFilterKey() === "NADJA";
+        if (isNadjaAna && typeof filename === "string" && filename.toLowerCase().endsWith(".xlsx")) {
+          filename = `${currentBaseName()}.xlsx`;
+        } else if (filename === "relatorio-processos.xlsx" || filename === "relatorio-processos-por-socio.xlsx") {
           filename = `${currentBaseName()}.xlsx`;
         }
         return originalWriteFile.call(this, workbook, filename, options);
