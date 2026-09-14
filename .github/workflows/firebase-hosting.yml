@@ -1,0 +1,57 @@
+name: Deploy Firebase Hosting - Filtro Sorteio Processual
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/**'
+      - 'firebase.json'
+      - '.firebaserc'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-hosting-filtro-sorteio-processual
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar codigo do repositorio
+        uses: actions/checkout@v4
+
+      - name: Validar estrutura do projeto
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f firebase.json
+          test -f .firebaserc
+          test -f public/index.html
+          grep -q 'filtro-sorteio-processual' .firebaserc
+          echo "Estrutura validada para o projeto filtro-sorteio-processual."
+
+      - name: Validar credencial Firebase
+        shell: bash
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FILTRO_SORTEIO_PROCESSUAL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT_FILTRO_SORTEIO_PROCESSUAL nao configurado no repositorio."
+            exit 1
+          fi
+          echo "Credencial Firebase encontrada."
+
+      - name: Publicar Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FILTRO_SORTEIO_PROCESSUAL }}
+          channelId: live
+          projectId: filtro-sorteio-processual
+          entryPoint: .
