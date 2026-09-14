@@ -1,1 +1,0 @@
-Teste tecnico de acionamento do GitHub Actions. Nao altera o funcionamento do aplicativo.
