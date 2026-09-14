@@ -190,7 +190,7 @@ window.addEventListener("DOMContentLoaded", () => {
       EP: "EP",
       FLAVIO: "FLÁVIO MARQUES",
       IMPROCEDENTE: "IMPROCEDENTE",
-      NADJA: "NADJA",
+      NADJA: "NADJA-ANA",
       "NADJA/FLAVIO": "NADJA-FLAVIO"
     };
     const filterName = names[filterKey] || "TODOS";
