@@ -2,16 +2,16 @@
   "use strict";
 
   const FILTER_NAMES = {
-    ALEATORIO: "ALEATÓRIO",
-    ANA: "ANA MULLER",
-    COMPROMETIDO: "COMPROMETIDO",
-    ED: "ED",
-    EF: "EF",
-    EP: "EP",
-    FLAVIO: "FLÁVIO MARQUES",
-    IMPROCEDENTE: "IMPROCEDENTE",
-    NADJA: "NADJA/ANA",
-    "NADJA/FLAVIO": "NADJA/FLAVIO"
+    "ALEATORIO": "ALEATÓRIO",
+    "IMPROCEDENTE": "IMPROCEDENTE",
+    "COMPROMETIDO": "COMPROMETIDO",
+    "ED": "ED",
+    "EF": "EF",
+    "EP": "EP",
+    "ANA MULLER": "ANA MULLER",
+    "FLAVIO MARQUES": "FLÁVIO MARQUES",
+    "NADJA/ANA": "NADJA/ANA",
+    "NADJA/FLAVIO": "NADJA/FLÁVIO"
   };
 
   const normalize = (value) => String(value ?? "")
@@ -21,95 +21,47 @@
     .replace(/\s+/g, " ")
     .trim();
 
-  let appliedFilter = "";
-
-  function sourcePrefix() {
-    const fileName = document.getElementById("excelFile")?.files?.[0]?.name || "";
-    const normalized = normalize(fileName);
-
-    if (normalized.includes("ANTIGOS")) return "PROCESSOS ANTIGOS";
-    if (normalized.includes("NOVOS")) return "PROCESSOS NOVOS";
-    if (normalized.includes("CONSOLIDAD")) return "PROCESSOS CONSOLIDADOS";
-    return "PROCESSOS";
+  function activeFilterName() {
+    const select = document.getElementById("filterInput");
+    const key = normalize(select?.value || "");
+    return FILTER_NAMES[key] || "TODOS";
   }
 
-  function filterKeyFromValue(value) {
-    const normalized = normalize(value);
-    const aliases = {
-      "ALEATORIO": "ALEATORIO",
-      "ANA": "ANA",
-      "ANA MULLER": "ANA",
-      "COMPROMETIDO": "COMPROMETIDO",
-      "ED": "ED",
-      "EF": "EF",
-      "EP": "EP",
-      "FLAVIO": "FLAVIO",
-      "FLAVIO MARQUES": "FLAVIO",
-      "IMPROCEDENTE": "IMPROCEDENTE",
-      "NADJA": "NADJA",
-      "NADJA/ANA": "NADJA",
-      "NADJA/FLAVIO": "NADJA/FLAVIO"
-    };
-    return aliases[normalized] || "";
-  }
-
-  function activeFilterKey() {
-    return appliedFilter || filterKeyFromValue(document.getElementById("filterInput")?.value);
-  }
-
-  function currentBaseName() {
-    const key = activeFilterKey();
-    const filterName = FILTER_NAMES[key] || "TODOS";
-    const safeFilterName = filterName.replace(/\//g, "-");
-    return `${sourcePrefix()} - ${safeFilterName}`;
+  function exportBaseName() {
+    const safeName = activeFilterName().replace(/[\\/:*?"<>|]/g, "-");
+    return `PROCESSOS - ${safeName}`;
   }
 
   function patchExports() {
-    const applyButton = document.getElementById("applyFilterBtn");
-    const clearFiltersButton = document.getElementById("clearFiltersBtn");
-    const clearAllButton = document.getElementById("clearBtn");
-    const fileInput = document.getElementById("excelFile");
-
-    applyButton?.addEventListener("click", () => {
-      appliedFilter = filterKeyFromValue(document.getElementById("filterInput")?.value);
-    });
-
-    clearFiltersButton?.addEventListener("click", () => {
-      appliedFilter = "";
-    });
-
-    clearAllButton?.addEventListener("click", () => {
-      appliedFilter = "";
-    });
-
-    fileInput?.addEventListener("change", () => {
-      appliedFilter = "";
-    });
-
     if (window.jspdf?.jsPDF?.prototype?.save) {
-      const originalPdfSave = window.jspdf.jsPDF.prototype.save;
-      window.jspdf.jsPDF.prototype.save = function(filename, options) {
-        const isNadjaAna = activeFilterKey() === "NADJA";
-        if (isNadjaAna && typeof filename === "string" && filename.toLowerCase().endsWith(".pdf")) {
-          filename = `${currentBaseName()}.pdf`;
-        } else if (filename === "relatorio-processos.pdf" || filename === "relatorio-processos-por-socio.pdf") {
-          filename = `${currentBaseName()}.pdf`;
-        }
-        return originalPdfSave.call(this, filename, options);
-      };
+      const proto = window.jspdf.jsPDF.prototype;
+      if (!proto.save.__filterFilenamePatched) {
+        const originalSave = proto.save;
+        const patchedSave = function(filename, options) {
+          if (typeof filename === "string" && filename.toLowerCase().endsWith(".pdf")) {
+            if (filename === "relatorio-processos.pdf" || filename === "relatorio-processos-por-socio.pdf") {
+              filename = `${exportBaseName()}.pdf`;
+            }
+          }
+          return originalSave.call(this, filename, options);
+        };
+        patchedSave.__filterFilenamePatched = true;
+        proto.save = patchedSave;
+      }
     }
 
-    if (window.XLSX?.writeFile) {
+    if (window.XLSX?.writeFile && !window.XLSX.writeFile.__filterFilenamePatched) {
       const originalWriteFile = window.XLSX.writeFile;
-      window.XLSX.writeFile = function(workbook, filename, options) {
-        const isNadjaAna = activeFilterKey() === "NADJA";
-        if (isNadjaAna && typeof filename === "string" && filename.toLowerCase().endsWith(".xlsx")) {
-          filename = `${currentBaseName()}.xlsx`;
-        } else if (filename === "relatorio-processos.xlsx" || filename === "relatorio-processos-por-socio.xlsx") {
-          filename = `${currentBaseName()}.xlsx`;
+      const patchedWriteFile = function(workbook, filename, options) {
+        if (typeof filename === "string" && filename.toLowerCase().endsWith(".xlsx")) {
+          if (filename === "relatorio-processos.xlsx" || filename === "relatorio-processos-por-socio.xlsx") {
+            filename = `${exportBaseName()}.xlsx`;
+          }
         }
         return originalWriteFile.call(this, workbook, filename, options);
       };
+      patchedWriteFile.__filterFilenamePatched = true;
+      window.XLSX.writeFile = patchedWriteFile;
     }
   }
 
