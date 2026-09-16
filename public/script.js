@@ -7,6 +7,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const RANDOM_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "COMPROMETIDO", "ED", "EF", "EP"];
   const FIXED_GROUPS = ["ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO"];
   const ALL_GROUPS = [...RANDOM_GROUPS, ...FIXED_GROUPS];
+  const RANDOM_ATTEMPTS = 4000;
+  const RANDOM_SWAP_PASSES = 20;
+  const RANDOM_EARLY_TOLERANCE = 0.0001;
 
   const labels = {
     ALEATORIO: "ALEATÓRIO",
@@ -140,7 +143,7 @@ window.addEventListener("DOMContentLoaded", () => {
   packageBtn.className = "btn btn-azul";
   packageBtn.type = "button";
   packageBtn.id = "packageBtn";
-  packageBtn.textContent = "Baixar Relatórios do Lote";
+  packageBtn.textContent = "SORTEIO EM LOTE";
   packageBtn.disabled = true;
   controls.insertBefore(colBtn, $("applyFilterBtn"));
   controls.insertBefore(previewBtn, $("applyFilterBtn"));
@@ -223,70 +226,74 @@ window.addEventListener("DOMContentLoaded", () => {
     return {flavio, ana: rows.length - flavio};
   }
 
-  function assignRandom(group) {
-    const pending = groupRows(group).filter(row => !partner(row));
-    if (!pending.length) return 0;
+  function shuffled(rows) {
+    const copy = [...rows];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
 
-    const q = quota(pending);
-    const totalValue = pending.reduce((sum, row) => sum + Math.max(0, parseBRL(row["Valor da causa"])), 0);
-    const ordered = [...pending].sort((a, b) =>
-      Math.max(0, parseBRL(b["Valor da causa"])) - Math.max(0, parseBRL(a["Valor da causa"])) ||
-      String(a.Cliente || "").localeCompare(String(b.Cliente || ""), "pt-BR")
-    );
+  function bestRandomAllocation(rows) {
+    const q = quota(rows);
+    const totalValue = rows.reduce((sum, row) => sum + Math.max(0, parseBRL(row["Valor da causa"])), 0);
+    const target = totalValue * 0.60;
+    let bestFlavio = null;
+    let bestValue = 0;
+    let bestError = Infinity;
 
-    let fc = 0, ac = 0, fv = 0, processedValue = 0;
-    for (let i = 0; i < ordered.length; i++) {
-      const row = ordered[i];
-      const value = Math.max(0, parseBRL(row["Valor da causa"]));
-      const processedCount = i + 1;
-      processedValue += value;
-      let toFlavio;
-
-      if (ac >= q.ana) toFlavio = true;
-      else if (fc >= q.flavio) toFlavio = false;
-      else {
-        const scoreFlavio = Math.abs((fc + 1) / processedCount - 0.60) + (processedValue ? Math.abs((fv + value) / processedValue - 0.60) : 0);
-        const scoreAna = Math.abs(fc / processedCount - 0.60) + (processedValue ? Math.abs(fv / processedValue - 0.60) : 0);
-        toFlavio = scoreFlavio <= scoreAna;
+    for (let attempt = 0; attempt < RANDOM_ATTEMPTS; attempt++) {
+      const order = shuffled(rows);
+      const flavio = order.slice(0, q.flavio);
+      const fv = flavio.reduce((sum, row) => sum + Math.max(0, parseBRL(row["Valor da causa"])), 0);
+      const error = Math.abs(fv - target);
+      if (error < bestError) {
+        bestError = error;
+        bestValue = fv;
+        bestFlavio = new Set(flavio);
       }
-
-      if (toFlavio) {
-        row["Sorteado Para"] = "Flávio";
-        fc++;
-        fv += value;
-      } else {
-        row["Sorteado Para"] = "Ana";
-        ac++;
-      }
+      if (totalValue > 0 && bestError / totalValue <= RANDOM_EARLY_TOLERANCE) break;
     }
 
-    const target = totalValue * 0.60;
-    for (let pass = 0; pass < 3; pass++) {
-      const flavioRows = pending.filter(row => partner(row) === "Flávio");
-      const anaRows = pending.filter(row => partner(row) === "Ana");
-      let best = null;
-      let gain = 0;
-      const current = Math.abs(fv - target);
+    if (!bestFlavio) bestFlavio = new Set(shuffled(rows).slice(0, q.flavio));
+    if (!totalValue) return bestFlavio;
+
+    for (let pass = 0; pass < RANDOM_SWAP_PASSES; pass++) {
+      const flavioRows = rows.filter(row => bestFlavio.has(row));
+      const anaRows = rows.filter(row => !bestFlavio.has(row));
+      const currentError = Math.abs(bestValue - target);
+      let bestSwap = null;
+      let nextError = currentError;
 
       for (const fr of flavioRows) {
         const fval = Math.max(0, parseBRL(fr["Valor da causa"]));
         for (const ar of anaRows) {
           const aval = Math.max(0, parseBRL(ar["Valor da causa"]));
-          const nextFv = fv - fval + aval;
-          const nextGain = current - Math.abs(nextFv - target);
-          if (nextGain > gain + 1e-9) {
-            gain = nextGain;
-            best = {fr, ar, nextFv};
+          const candidateValue = bestValue - fval + aval;
+          const candidateError = Math.abs(candidateValue - target);
+          if (candidateError + 1e-9 < nextError) {
+            nextError = candidateError;
+            bestSwap = {fr, ar, candidateValue};
           }
         }
       }
 
-      if (!best) break;
-      best.fr["Sorteado Para"] = "Ana";
-      best.ar["Sorteado Para"] = "Flávio";
-      fv = best.nextFv;
+      if (!bestSwap) break;
+      bestFlavio.delete(bestSwap.fr);
+      bestFlavio.add(bestSwap.ar);
+      bestValue = bestSwap.candidateValue;
+      if (nextError / totalValue <= RANDOM_EARLY_TOLERANCE) break;
     }
 
+    return bestFlavio;
+  }
+
+  function assignRandom(group) {
+    const pending = groupRows(group).filter(row => !partner(row));
+    if (!pending.length) return 0;
+    const flavioSet = bestRandomAllocation(pending);
+    pending.forEach(row => row["Sorteado Para"] = flavioSet.has(row) ? "Flávio" : "Ana");
     return pending.length;
   }
 
@@ -384,7 +391,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const data = groupRows(activeFilter);
     const isRandom = RANDOM_GROUPS.includes(activeFilter);
     const q = isRandom ? quota(data) : null;
-    const rule = isRandom ? `${q.flavio} Flávio / ${q.ana} Ana, equilibrando quantidade e valor` : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio");
+    const rule = isRandom ? `${q.flavio} Flávio / ${q.ana} Ana, com tentativas aleatórias para aproximar 60/40 em quantidade e valor` : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio");
     modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Somente este Tipo será processado. Os demais permanecerão inalterados.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
   };
 
@@ -576,9 +583,14 @@ window.addEventListener("DOMContentLoaded", () => {
     return doc;
   }
 
+  function safeReportName(name) {
+    return String(name || "TODOS").replace(/[\\/:*?"<>|]/g, "-");
+  }
+
   $("exportPDF").onclick = () => {
     if (!filtered.length) return modal("Sem dados", "<p>Nenhum dado para exportar.</p>");
-    makePDF(activeFilter ? `Relatório - ${labels[activeFilter]}` : "Relatório de Processos", filtered).save("relatorio-processos.pdf");
+    const filterName = activeFilter ? labels[activeFilter] : "TODOS";
+    makePDF(activeFilter ? `Relatório - ${filterName}` : "Relatório de Processos", filtered).save(`PROCESSOS - ${safeReportName(filterName)}.pdf`);
   };
 
   $("exportXLSX").onclick = () => {
@@ -587,7 +599,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const rows = filtered.map(row => Object.fromEntries(cols.map(column => [column, row[column] ?? ""])));
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows, {header: cols}), "Dados");
-    XLSX.writeFile(workbook, "relatorio-processos.xlsx");
+    const filterName = activeFilter ? labels[activeFilter] : "TODOS";
+    XLSX.writeFile(workbook, `PROCESSOS - ${safeReportName(filterName)}.xlsx`);
   };
 
   async function loadJSZip() {
