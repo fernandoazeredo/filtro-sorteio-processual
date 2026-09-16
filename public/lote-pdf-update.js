@@ -17,7 +17,7 @@
   const RANDOM_GROUPS = new Set(["ALEATORIO", "IMPROCEDENTE", "COMPROMETIDO", "ED", "EF", "EP"]);
   const FIXED_TO_ANA = new Set(["ANA", "NADJA"]);
   const REQUIRED = ["Cliente", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
-  const COLS = [...REQUIRED, "Sorteado Para"];
+  const REPORT_COLS = [...REQUIRED, "Sorteado Para"];
 
   const normalize = value => String(value ?? "")
     .normalize("NFD")
@@ -91,8 +91,8 @@
   }
 
   function assignFixed(rows, group) {
-    const partner = FIXED_TO_ANA.has(group) ? "Ana" : "Flávio";
-    rows.forEach(row => row["Sorteado Para"] = partner);
+    const name = FIXED_TO_ANA.has(group) ? "Ana" : "Flávio";
+    rows.forEach(row => row["Sorteado Para"] = name);
   }
 
   function assignBalanced(rows) {
@@ -165,9 +165,9 @@
 
   function executeFullAllocation(rows) {
     for (const filter of FILTER_SEQUENCE) {
-      const groupRows = rows.filter(row => row.__group === filter.group);
-      if (RANDOM_GROUPS.has(filter.group)) assignBalanced(groupRows);
-      else assignFixed(groupRows, filter.group);
+      const rowsOfGroup = rows.filter(row => row.__group === filter.group);
+      if (RANDOM_GROUPS.has(filter.group)) assignBalanced(rowsOfGroup);
+      else assignFixed(rowsOfGroup, filter.group);
     }
 
     const unassigned = rows.filter(row => !row["Sorteado Para"]);
@@ -175,86 +175,74 @@
   }
 
   function groupSummary(rows) {
-    let fc = 0, fv = 0, ac = 0, av = 0;
+    let ac = 0, av = 0, fc = 0, fv = 0;
     rows.forEach(row => {
       const value = parseBRL(row["Valor da causa"]);
-      if (row["Sorteado Para"] === "Flávio") { fc++; fv += value; }
-      else if (row["Sorteado Para"] === "Ana") { ac++; av += value; }
+      if (row["Sorteado Para"] === "Ana") { ac++; av += value; }
+      else if (row["Sorteado Para"] === "Flávio") { fc++; fv += value; }
     });
-    return {fc, fv, ac, av, tc: fc + ac, tv: fv + av};
+    return {ac, av, fc, fv, tc: ac + fc, tv: av + fv};
   }
 
-  function addPartnerTable(doc, title, rows, startY, color) {
-    if (!rows.length) return startY;
-    doc.setFillColor(...color);
+  function partnerSection(doc, title, rows, y, headFillColor) {
+    const cols = REPORT_COLS;
+    doc.setFillColor(...headFillColor);
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10.5);
+    doc.setFontSize(11);
     doc.setFont(undefined, "bold");
-    doc.rect(14, startY, 269, 8, "F");
-    doc.text(title, 18, startY + 5.5);
+    doc.rect(14, y, 269, 8, "F");
+    doc.text(title, 18, y + 5.5);
+    y += 10;
 
+    doc.setTextColor(20, 30, 45);
     doc.autoTable({
-      startY: startY + 10,
-      head: [["Cliente", "Número de CNJ", "Tipo", "Valor da causa (R$)", "Última Decisão", "Sorteado Para"]],
-      body: rows.map(row => [
-        row.Cliente ?? "",
-        row["Número de CNJ"] ?? "",
-        row.Tipo ?? "",
-        brl(row["Valor da causa"]),
-        row["Última Decisão"] ?? "",
-        row["Sorteado Para"] ?? ""
-      ]),
+      startY: y,
+      head: [cols.map(c => c === "Valor da causa" ? "Valor da causa (R$)" : c)],
+      body: rows.map(row => cols.map(c => c === "Valor da causa" ? brl(row[c]) : (row[c] ?? ""))),
       theme: "striped",
-      headStyles: {fillColor: color, textColor: 255, fontSize: 6.5},
-      styles: {fontSize: 6.1, cellPadding: 1.15, overflow: "linebreak"},
-      margin: {left: 14, right: 14},
-      columnStyles: {
-        0: {cellWidth: 48},
-        1: {cellWidth: 43},
-        2: {cellWidth: 27},
-        3: {cellWidth: 31},
-        4: {cellWidth: 88},
-        5: {cellWidth: 28}
-      }
+      headStyles: {fillColor: headFillColor, textColor: 255, fontSize: 6.5},
+      styles: {fontSize: 6.2, cellPadding: 1.2},
+      margin: {left: 14, right: 14}
     });
     return doc.lastAutoTable.finalY + 6;
   }
 
   function makeFilterPdf(filter, rows) {
     const doc = new window.jspdf.jsPDF({orientation: "landscape"});
-    const s = groupSummary(rows);
+    const title = `Relatório - ${filter.type}`;
 
-    doc.setTextColor(18, 45, 92);
     doc.setFontSize(13);
+    doc.setTextColor(18, 45, 92);
     doc.setFont(undefined, "bold");
-    doc.text(filter.type, 14, 12);
+    doc.text(title, 14, 12);
     doc.setFont(undefined, "normal");
     doc.setFontSize(8);
     doc.setTextColor(90, 100, 115);
-    doc.text(`Quantidade: ${rows.length} | Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 18);
+    doc.text(`Exportado em: ${new Date().toLocaleString("pt-BR")}`, 14, 18);
 
     const flavioRows = rows.filter(row => row["Sorteado Para"] === "Flávio");
     const anaRows = rows.filter(row => row["Sorteado Para"] === "Ana");
     let y = 23;
 
-    if (flavioRows.length) y = addPartnerTable(doc, "FLÁVIO MARQUES", flavioRows, y, [39, 72, 190]);
+    if (flavioRows.length) y = partnerSection(doc, "FLÁVIO MARQUES", flavioRows, y, [39, 72, 190]);
     if (anaRows.length) {
       if (y > 150) { doc.addPage(); y = 18; }
-      y = addPartnerTable(doc, "ANA PAULA BONADIMAN MULLER", anaRows, y, [220, 38, 38]);
+      y = partnerSection(doc, "ANA PAULA BONADIMAN MULLER", anaRows, y, [220, 38, 38]);
     }
 
+    const s = groupSummary(rows);
     if (y > 160) { doc.addPage(); y = 18; }
     doc.setTextColor(20, 30, 45);
-    doc.setFontSize(10.5);
+    doc.setFontSize(11);
     doc.setFont(undefined, "bold");
-    doc.text("RESUMO DO FILTRO", 14, y);
+    doc.text("RESUMO CONSOLIDADO FINAL", 14, y);
     doc.autoTable({
       startY: y + 4,
       head: [["Sócio", "Quantidade", "% Quantidade", "Valor Total (R$)", "% Valor"]],
       body: [
         ["Flávio Marques", s.fc, pct(s.fc, s.tc), brl(s.fv), pct(s.fv, s.tv)],
         ["Ana Paula Bonadiman Muller", s.ac, pct(s.ac, s.tc), brl(s.av), pct(s.av, s.tv)],
-        ["Total Geral", s.tc, "100%", brl(s.tv), "100%"]
+        ["Total Geral", s.tc, s.tc ? "100%" : "0%", brl(s.tv), s.tv ? "100%" : "0%"]
       ],
       headStyles: {fillColor: [51, 65, 85], textColor: 255},
       styles: {fontSize: 8}
@@ -266,35 +254,13 @@
   function makeSummaryPdf(rows) {
     const doc = new window.jspdf.jsPDF({orientation: "landscape"});
     const body = FILTER_SEQUENCE.map(filter => {
-      const groupRows = rows.filter(row => row.__group === filter.group);
-      const s = groupSummary(groupRows);
-      return [
-        filter.type,
-        s.tc,
-        s.fc,
-        pct(s.fc, s.tc),
-        s.ac,
-        pct(s.ac, s.tc),
-        brl(s.fv),
-        pct(s.fv, s.tv),
-        brl(s.av),
-        pct(s.av, s.tv)
-      ];
+      const rowsOfGroup = rows.filter(row => row.__group === filter.group);
+      const s = groupSummary(rowsOfGroup);
+      return [filter.type, s.tc, s.fc, pct(s.fc, s.tc), s.ac, pct(s.ac, s.tc), brl(s.fv), pct(s.fv, s.tv), brl(s.av), pct(s.av, s.tv)];
     });
 
     const total = groupSummary(rows);
-    body.push([
-      "TOTAL GERAL",
-      total.tc,
-      total.fc,
-      pct(total.fc, total.tc),
-      total.ac,
-      pct(total.ac, total.tc),
-      brl(total.fv),
-      pct(total.fv, total.tv),
-      brl(total.av),
-      pct(total.av, total.tv)
-    ]);
+    body.push(["TOTAL GERAL", total.tc, total.fc, pct(total.fc, total.tc), total.ac, pct(total.ac, total.tc), brl(total.fv), pct(total.fv, total.tv), brl(total.av), pct(total.av, total.tv)]);
 
     doc.setTextColor(18, 45, 92);
     doc.setFontSize(14);
@@ -359,10 +325,10 @@
       let included = 0;
 
       for (const filter of FILTER_SEQUENCE) {
-        const groupRows = rows.filter(row => row.__group === filter.group);
-        if (!groupRows.length) continue;
-        included += groupRows.length;
-        const pdf = makeFilterPdf(filter, groupRows);
+        const rowsOfGroup = rows.filter(row => row.__group === filter.group);
+        if (!rowsOfGroup.length) continue;
+        included += rowsOfGroup.length;
+        const pdf = makeFilterPdf(filter, rowsOfGroup);
         zip.file(`${filter.file}.pdf`, pdf.output("arraybuffer"));
       }
 
@@ -397,12 +363,10 @@
 
     button.onclick = null;
     button.textContent = "Baixar Relatórios do Lote";
-    button.title = "Executa o sorteio completo de todos os filtros e baixa um ZIP com os PDFs em sequência.";
+    button.title = "Executa o sorteio completo de todos os filtros e baixa um ZIP com os PDFs no mesmo layout da exportação individual.";
     button.addEventListener("click", () => executeAndDownloadZip(button));
 
-    const syncEnabled = () => {
-      button.disabled = !input.files?.[0];
-    };
+    const syncEnabled = () => { button.disabled = !input.files?.[0]; };
 
     input.addEventListener("change", () => setTimeout(syncEnabled, 0));
     const observer = new MutationObserver(() => {
