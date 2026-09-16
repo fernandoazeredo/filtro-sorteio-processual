@@ -19,6 +19,13 @@
   const REQUIRED = ["Cliente", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
   const REPORT_COLS = [...REQUIRED, "Sorteado Para"];
 
+  const BLUE = [39, 72, 190];
+  const RED = [220, 38, 38];
+  const NAVY = [24, 58, 96];
+  const SLATE = [51, 65, 85];
+  const LIGHT_BLUE = [76, 132, 197];
+  const ORANGE = [236, 125, 42];
+
   const normalize = value => String(value ?? "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
@@ -38,7 +45,7 @@
   };
 
   const brl = value => parseBRL(value).toLocaleString("pt-BR", {style: "currency", currency: "BRL"});
-  const pct = (a, b) => b ? `${((a / b) * 100).toFixed(2)}%` : "0%";
+  const pct = (a, b) => b ? `${((a / b) * 100).toFixed(2)}%` : "0.00%";
 
   function typeToGroup(value) {
     const map = {
@@ -120,8 +127,10 @@
       if (ac >= q.ana) toFlavio = true;
       else if (fc >= q.flavio) toFlavio = false;
       else {
-        const scoreFlavio = Math.abs((fc + 1) / processedCount - 0.60) + (processedValue ? Math.abs((fv + value) / processedValue - 0.60) : 0);
-        const scoreAna = Math.abs(fc / processedCount - 0.60) + (processedValue ? Math.abs(fv / processedValue - 0.60) : 0);
+        const scoreFlavio = Math.abs((fc + 1) / processedCount - 0.60) +
+          (processedValue ? Math.abs((fv + value) / processedValue - 0.60) : 0);
+        const scoreAna = Math.abs(fc / processedCount - 0.60) +
+          (processedValue ? Math.abs(fv / processedValue - 0.60) : 0);
         toFlavio = scoreFlavio <= scoreAna;
       }
 
@@ -169,7 +178,6 @@
       if (RANDOM_GROUPS.has(filter.group)) assignBalanced(rowsOfGroup);
       else assignFixed(rowsOfGroup, filter.group);
     }
-
     const unassigned = rows.filter(row => !row["Sorteado Para"]);
     if (unassigned.length) throw new Error(`${unassigned.length} processo(s) ficaram sem atribuição.`);
   }
@@ -184,101 +192,269 @@
     return {ac, av, fc, fv, tc: ac + fc, tv: av + fv};
   }
 
-  function partnerSection(doc, title, rows, y, headFillColor) {
-    const cols = REPORT_COLS;
-    doc.setFillColor(...headFillColor);
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(11);
-    doc.setFont(undefined, "bold");
-    doc.rect(14, y, 269, 8, "F");
-    doc.text(title, 18, y + 5.5);
-    y += 10;
-
-    doc.setTextColor(20, 30, 45);
-    doc.autoTable({
-      startY: y,
-      head: [cols.map(c => c === "Valor da causa" ? "Valor da causa (R$)" : c)],
-      body: rows.map(row => cols.map(c => c === "Valor da causa" ? brl(row[c]) : (row[c] ?? ""))),
-      theme: "striped",
-      headStyles: {fillColor: headFillColor, textColor: 255, fontSize: 6.5},
-      styles: {fontSize: 6.2, cellPadding: 1.2},
-      margin: {left: 14, right: 14}
-    });
-    return doc.lastAutoTable.finalY + 6;
-  }
-
-  function makeFilterPdf(filter, rows) {
-    const doc = new window.jspdf.jsPDF({orientation: "landscape"});
-    const title = `Relatório - ${filter.type}`;
-
-    doc.setFontSize(13);
+  function drawReportHeader(doc, title, generatedAt) {
     doc.setTextColor(18, 45, 92);
+    doc.setFontSize(16);
     doc.setFont(undefined, "bold");
     doc.text(title, 14, 12);
     doc.setFont(undefined, "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(90, 100, 115);
-    doc.text(`Exportado em: ${new Date().toLocaleString("pt-BR")}`, 14, 18);
+    doc.text(`Exportado em: ${generatedAt}`, 14, 18);
+  }
+
+  function partnerMetrics(doc, rows, value, totalCount, totalValue, color, startY) {
+    doc.autoTable({
+      startY,
+      margin: {left: 14, right: 14},
+      theme: "grid",
+      head: [["Quantidade", "Valor Total (R$)", "% Quantidade", "% Valor"]],
+      body: [[String(rows.length), brl(value), pct(rows.length, totalCount), pct(value, totalValue)]],
+      headStyles: {
+        fillColor: color,
+        textColor: [255, 255, 255],
+        halign: "center",
+        fontStyle: "bold",
+        fontSize: 8
+      },
+      bodyStyles: {
+        halign: "center",
+        fontSize: 8.5,
+        fontStyle: "bold",
+        textColor: [55, 65, 80]
+      },
+      styles: {cellPadding: 2.0}
+    });
+    return doc.lastAutoTable.finalY + 5;
+  }
+
+  function processTable(doc, partnerName, rows, color, startY) {
+    const cols = REPORT_COLS;
+    const body = [...rows]
+      .sort((a, b) => String(a.Cliente || "").localeCompare(String(b.Cliente || ""), "pt-BR"))
+      .map(row => cols.map(column => column === "Valor da causa" ? brl(row[column]) : (row[column] ?? "")));
+
+    const startPage = doc.internal.getNumberOfPages();
+
+    doc.autoTable({
+      startY,
+      margin: {left: 4, right: 4, top: 18, bottom: 8},
+      head: [cols.map(column => column === "Valor da causa" ? "Valor da causa (R$)" : column)],
+      body,
+      theme: "striped",
+      headStyles: {
+        fillColor: color,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 6.2,
+        cellPadding: 1.1
+      },
+      styles: {
+        fontSize: 5.7,
+        cellPadding: 0.85,
+        overflow: "linebreak",
+        textColor: [45, 55, 68],
+        valign: "middle"
+      },
+      alternateRowStyles: {fillColor: [245, 247, 250]},
+      columnStyles: {
+        0: {cellWidth: 70},
+        1: {cellWidth: 58},
+        2: {cellWidth: 27},
+        3: {cellWidth: 40},
+        4: {cellWidth: 54},
+        5: {cellWidth: 24}
+      },
+      didDrawPage: data => {
+        if (doc.internal.getNumberOfPages() > startPage) {
+          doc.setTextColor(...color);
+          doc.setFontSize(8.5);
+          doc.setFont(undefined, "bold");
+          doc.text(`${partnerName} — continuação`, 6, 9);
+          doc.setTextColor(45, 55, 68);
+        }
+      }
+    });
+  }
+
+  function addPartnerBlock(doc, reportTitle, partnerName, rows, partnerValue, totalCount, totalValue, color, generatedAt, addPageFirst) {
+    if (addPageFirst) doc.addPage();
+    drawReportHeader(doc, reportTitle, generatedAt);
+
+    doc.setFillColor(...color);
+    doc.roundedRect(14, 27, 269, 12, 2, 2, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(12.5);
+    doc.setFont(undefined, "bold");
+    doc.text(partnerName, 19, 35);
+
+    let y = partnerMetrics(doc, rows, partnerValue, totalCount, totalValue, color, 44);
+    if (rows.length) processTable(doc, partnerName, rows, color, y);
+  }
+
+  function addFinalSummaryPage(doc, summary) {
+    doc.addPage();
+    doc.setTextColor(18, 45, 92);
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(17);
+    doc.text("RESUMO CONSOLIDADO FINAL", 14, 18);
+
+    doc.autoTable({
+      startY: 31,
+      margin: {left: 18, right: 18},
+      theme: "grid",
+      head: [["Sócio", "Quantidade", "% Quantidade", "Valor Total (R$)", "% Valor"]],
+      body: [
+        ["Flávio Marques", summary.fc, pct(summary.fc, summary.tc), brl(summary.fv), pct(summary.fv, summary.tv)],
+        ["Ana Paula Bonadiman Muller", summary.ac, pct(summary.ac, summary.tc), brl(summary.av), pct(summary.av, summary.tv)],
+        ["Total Geral", summary.tc, summary.tc ? "100%" : "0%", brl(summary.tv), summary.tv ? "100%" : "0%"]
+      ],
+      headStyles: {
+        fillColor: SLATE,
+        textColor: [255, 255, 255],
+        halign: "center",
+        fontStyle: "bold",
+        fontSize: 10
+      },
+      bodyStyles: {
+        halign: "center",
+        fontSize: 10,
+        textColor: [55, 65, 80],
+        minCellHeight: 17
+      },
+      columnStyles: {0: {fontStyle: "bold"}},
+      styles: {cellPadding: 3}
+    });
+  }
+
+  function makeFilterPdf(filter, rows) {
+    const doc = new window.jspdf.jsPDF({orientation: "landscape", unit: "mm", format: "a4"});
+    const title = `Relatório - ${filter.type}`;
+    const generatedAt = new Date().toLocaleString("pt-BR");
+    const summary = groupSummary(rows);
 
     const flavioRows = rows.filter(row => row["Sorteado Para"] === "Flávio");
     const anaRows = rows.filter(row => row["Sorteado Para"] === "Ana");
-    let y = 23;
 
-    if (flavioRows.length) y = partnerSection(doc, "FLÁVIO MARQUES", flavioRows, y, [39, 72, 190]);
-    if (anaRows.length) {
-      if (y > 150) { doc.addPage(); y = 18; }
-      y = partnerSection(doc, "ANA PAULA BONADIMAN MULLER", anaRows, y, [220, 38, 38]);
+    let usedFirstPage = false;
+    if (flavioRows.length) {
+      addPartnerBlock(doc, title, "FLÁVIO MARQUES", flavioRows, summary.fv, summary.tc, summary.tv, BLUE, generatedAt, false);
+      usedFirstPage = true;
     }
 
-    const s = groupSummary(rows);
-    if (y > 160) { doc.addPage(); y = 18; }
-    doc.setTextColor(20, 30, 45);
-    doc.setFontSize(11);
-    doc.setFont(undefined, "bold");
-    doc.text("RESUMO CONSOLIDADO FINAL", 14, y);
-    doc.autoTable({
-      startY: y + 4,
-      head: [["Sócio", "Quantidade", "% Quantidade", "Valor Total (R$)", "% Valor"]],
-      body: [
-        ["Flávio Marques", s.fc, pct(s.fc, s.tc), brl(s.fv), pct(s.fv, s.tv)],
-        ["Ana Paula Bonadiman Muller", s.ac, pct(s.ac, s.tc), brl(s.av), pct(s.av, s.tv)],
-        ["Total Geral", s.tc, s.tc ? "100%" : "0%", brl(s.tv), s.tv ? "100%" : "0%"]
-      ],
-      headStyles: {fillColor: [51, 65, 85], textColor: 255},
-      styles: {fontSize: 8}
-    });
+    if (anaRows.length) {
+      addPartnerBlock(doc, title, "ANA PAULA BONADIMAN MULLER", anaRows, summary.av, summary.tc, summary.tv, RED, generatedAt, usedFirstPage);
+      usedFirstPage = true;
+    }
 
+    if (!usedFirstPage) drawReportHeader(doc, title, generatedAt);
+    addFinalSummaryPage(doc, summary);
     return doc;
   }
 
   function makeSummaryPdf(rows) {
-    const doc = new window.jspdf.jsPDF({orientation: "landscape"});
-    const body = FILTER_SEQUENCE.map(filter => {
-      const rowsOfGroup = rows.filter(row => row.__group === filter.group);
-      const s = groupSummary(rowsOfGroup);
-      return [filter.type, s.tc, s.fc, pct(s.fc, s.tc), s.ac, pct(s.ac, s.tc), brl(s.fv), pct(s.fv, s.tv), brl(s.av), pct(s.av, s.tv)];
-    });
-
+    const doc = new window.jspdf.jsPDF({orientation: "landscape", unit: "mm", format: "a4"});
     const total = groupSummary(rows);
-    body.push(["TOTAL GERAL", total.tc, total.fc, pct(total.fc, total.tc), total.ac, pct(total.ac, total.tc), brl(total.fv), pct(total.fv, total.tv), brl(total.av), pct(total.av, total.tv)]);
+    const now = new Date().toLocaleString("pt-BR");
 
-    doc.setTextColor(18, 45, 92);
-    doc.setFontSize(14);
+    doc.setFillColor(...NAVY);
+    doc.rect(4, 4, 289, 10, "F");
+    doc.setTextColor(255, 255, 255);
     doc.setFont(undefined, "bold");
-    doc.text("RESUMO CONSOLIDADO DO SORTEIO", 14, 14);
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(90, 100, 115);
-    doc.text(`Total de processos: ${rows.length} | Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 20);
+    doc.setFontSize(14);
+    doc.text("RESUMO CONSOLIDADO DO SORTEIO", 148.5, 11, {align: "center"});
 
     doc.autoTable({
-      startY: 25,
-      head: [["Tipo", "Total", "Qtd Flávio", "% Qtd F.", "Qtd Ana", "% Qtd A.", "Valor Flávio", "% Valor F.", "Valor Ana", "% Valor A."]],
-      body,
-      theme: "grid",
-      headStyles: {fillColor: [51, 65, 85], textColor: 255, fontSize: 7},
-      styles: {fontSize: 6.8, cellPadding: 1.3}
+      startY: 20,
+      margin: {left: 4},
+      tableWidth: 138,
+      theme: "plain",
+      head: [["Indicador", "Quantidade", "% da base total"]],
+      body: [
+        ["Total de processos", total.tc, "100,00%"],
+        ["Flávio Marques", total.fc, pct(total.fc, total.tc).replace(".", ",")],
+        ["Ana Paula Bonadiman Muller", total.ac, pct(total.ac, total.tc).replace(".", ",")]
+      ],
+      headStyles: {fillColor: LIGHT_BLUE, textColor: 255, halign: "center", fontStyle: "bold", fontSize: 8},
+      bodyStyles: {fontSize: 8, textColor: [25, 25, 25], cellPadding: 1.4},
+      columnStyles: {1: {halign: "right"}, 2: {halign: "right"}}
     });
+
+    doc.autoTable({
+      startY: 20,
+      margin: {left: 151},
+      tableWidth: 142,
+      theme: "plain",
+      head: [["Rateio geral", "Valor Total (R$)", "% do valor"]],
+      body: [
+        ["Flávio Marques", brl(total.fv), pct(total.fv, total.tv).replace(".", ",")],
+        ["Ana Paula Bonadiman Muller", brl(total.av), pct(total.av, total.tv).replace(".", ",")],
+        ["Total Geral", brl(total.tv), "100,00%"]
+      ],
+      headStyles: {fillColor: ORANGE, textColor: 255, halign: "center", fontStyle: "bold", fontSize: 8},
+      bodyStyles: {fontSize: 8, textColor: [25, 25, 25], cellPadding: 1.4},
+      columnStyles: {1: {halign: "right"}, 2: {halign: "right"}}
+    });
+
+    const body = FILTER_SEQUENCE.map(filter => {
+      const groupRows = rows.filter(row => row.__group === filter.group);
+      const s = groupSummary(groupRows);
+      return [
+        filter.type,
+        s.tc,
+        s.fc,
+        pct(s.fc, s.tc),
+        s.ac,
+        pct(s.ac, s.tc),
+        brl(s.fv),
+        pct(s.fv, s.tv),
+        brl(s.av),
+        pct(s.av, s.tv)
+      ];
+    });
+
+    body.push([
+      "TOTAL GERAL",
+      total.tc,
+      total.fc,
+      pct(total.fc, total.tc),
+      total.ac,
+      pct(total.ac, total.tc),
+      brl(total.fv),
+      pct(total.fv, total.tv),
+      brl(total.av),
+      pct(total.av, total.tv)
+    ]);
+
+    doc.autoTable({
+      startY: 52,
+      margin: {left: 4, right: 4},
+      theme: "grid",
+      head: [["Categoria", "Total", "Qtd Flávio", "% Qtd F.", "Qtd Ana", "% Qtd A.", "Valor Flávio", "% Valor F.", "Valor Ana", "% Valor A."]],
+      body,
+      headStyles: {fillColor: [69, 119, 190], textColor: 255, halign: "center", fontStyle: "bold", fontSize: 6.8},
+      bodyStyles: {fontSize: 6.6, textColor: [25, 25, 25], cellPadding: 1.2},
+      alternateRowStyles: {fillColor: [247, 248, 250]},
+      columnStyles: {
+        0: {cellWidth: 36},
+        1: {cellWidth: 18, halign: "right"},
+        2: {cellWidth: 22, halign: "right"},
+        3: {cellWidth: 20, halign: "right"},
+        4: {cellWidth: 19, halign: "right"},
+        5: {cellWidth: 20, halign: "right"},
+        6: {cellWidth: 38, halign: "right"},
+        7: {cellWidth: 22, halign: "right"},
+        8: {cellWidth: 38, halign: "right"},
+        9: {cellWidth: 22, halign: "right"}
+      }
+    });
+
+    doc.setFillColor(255, 248, 214);
+    doc.rect(4, 190, 289, 10, "F");
+    doc.setTextColor(60, 60, 60);
+    doc.setFont(undefined, "italic");
+    doc.setFontSize(7);
+    doc.text(`Gerado em ${now}. Classificação dos relatórios baseada exclusivamente na coluna Tipo.`, 6, 196);
 
     return doc;
   }
@@ -363,12 +539,12 @@
 
     button.onclick = null;
     button.textContent = "Baixar Relatórios do Lote";
-    button.title = "Executa o sorteio completo de todos os filtros e baixa um ZIP com os PDFs no mesmo layout da exportação individual.";
+    button.title = "Executa o sorteio completo de todos os filtros e baixa um ZIP com os PDFs no layout aprovado.";
     button.addEventListener("click", () => executeAndDownloadZip(button));
 
     const syncEnabled = () => { button.disabled = !input.files?.[0]; };
-
     input.addEventListener("change", () => setTimeout(syncEnabled, 0));
+
     const observer = new MutationObserver(() => {
       if (input.files?.[0] && button.disabled && button.textContent !== "Processando sorteio e relatórios...") button.disabled = false;
       if (!input.files?.[0] && !button.disabled) button.disabled = true;
