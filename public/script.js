@@ -24,6 +24,7 @@ window.addEventListener("DOMContentLoaded", () => {
     "NADJA/FLAVIO": "NADJA/FLÁVIO"
   };
 
+  let loadedFile = null;
   let master = [];
   let filtered = [];
   let available = [...DEFAULT_COLS];
@@ -297,15 +298,36 @@ window.addEventListener("DOMContentLoaded", () => {
     return pending.length;
   }
 
+  window.FSPDrawState = {
+    completeForBatch(file) {
+      if (file !== loadedFile || !master.length) {
+        throw Error("Aguarde a planilha terminar de carregar antes de executar o lote.");
+      }
+      for (const group of ALL_GROUPS) {
+        if (RANDOM_GROUPS.includes(group)) assignRandom(group);
+        else assignFixedGroup(group);
+      }
+      batchDone = master.every(row => partner(row));
+      packageBtn.disabled = !batchDone;
+      render(filtered);
+      summaryUI(filtered);
+      return master.map(row => ({...row}));
+    }
+  };
+
   $("excelFile").onchange = event => {
     const file = event.target.files[0];
+    loadedFile = null;
+    packageBtn.disabled = true;
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
         const workbook = XLSX.read(new Uint8Array(ev.target.result), {type: "array", cellStyles: true});
         const result = extractBase(workbook);
+        if ($("excelFile").files[0] !== file) return;
         master = result.rows;
+        loadedFile = file;
         available = [...DEFAULT_COLS];
         selected = [...DEFAULT_COLS];
         buildGroups();
@@ -521,26 +543,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function pdfFooterName(rows) {
     const s = sum(rows);
-    if (s.fc && s.ac) return "Sorteio (ambos)";
-    if (s.fc) return "Flávio Marques";
-    if (s.ac) return "Ana Paula Bonadiman Muller";
-    return "Sem atribuição";
-  }
-
-  function addPdfFooters(doc, when, category, name) {
-    const pages = doc.internal.getNumberOfPages();
-    const width = doc.internal.pageSize.getWidth();
-    const height = doc.internal.pageSize.getHeight();
-    for (let page = 1; page <= pages; page++) {
-      doc.setPage(page);
-      doc.setDrawColor(205, 211, 220);
-      doc.setLineWidth(0.2);
-      doc.line(14, height - 9, width - 14, height - 9);
-      doc.setFont(undefined, "normal");
-      doc.setFontSize(6.5);
-      doc.setTextColor(90, 100, 115);
-      doc.text(`Exportado: ${when} | Categoria: ${category} | Nome: ${name}`, 14, height - 4.5);
-    }
+    if (s.fc && s.ac) return "Sorteio";
+    if (s.fc) return "Flávio";
+    if (s.ac) return "Ana";
+    return "Sorteio";
   }
 
   function partnerSection(doc, title, category, rows, y, headFillColor) {
@@ -573,6 +579,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
+    window.FSPPdfFooter.markPages(doc, startPage, doc.internal.getNumberOfPages(), partner(rows[0]));
     return doc.lastAutoTable.finalY + 6;
   }
 
@@ -604,6 +611,7 @@ window.addEventListener("DOMContentLoaded", () => {
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
     doc.text("RESUMO CONSOLIDADO FINAL", 14, y);
+    const summaryStartPage = doc.internal.getNumberOfPages();
     doc.autoTable({
       startY: y + 4,
       head: [["Sócio", "Quantidade", "% Quantidade", "Valor Total (R$)", "% Valor"]],
@@ -615,7 +623,8 @@ window.addEventListener("DOMContentLoaded", () => {
       headStyles: {fillColor: [51, 65, 85], textColor: 255},
       styles: {fontSize: 8}
     });
-    addPdfFooters(doc, when, category, pdfFooterName(rows));
+    window.FSPPdfFooter.markPages(doc, summaryStartPage, doc.internal.getNumberOfPages(), pdfFooterName(rows));
+    window.FSPPdfFooter.addFooters(doc, when, category, pdfFooterName(rows));
     return doc;
   }
 
@@ -680,6 +689,7 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   function reset() {
+    loadedFile = null;
     master = [];
     filtered = [];
     available = [...DEFAULT_COLS];
