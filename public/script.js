@@ -659,6 +659,89 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function buildBatchExcelWorkbook() {
+    const workbook = XLSX.utils.book_new();
+    const cols = reportCols();
+
+    const resumo = ALL_GROUPS.map(group => {
+      const s = sum(groupRows(group));
+      return {
+        "Tipo": labels[group],
+        "Quantidade Total": s.tc,
+        "Qtd. Flávio": s.fc,
+        "% Qtd. Flávio": pct(s.fc, s.tc),
+        "Valor Flávio": s.fv,
+        "% Valor Flávio": pct(s.fv, s.tv),
+        "Qtd. Ana": s.ac,
+        "% Qtd. Ana": pct(s.ac, s.tc),
+        "Valor Ana": s.av,
+        "% Valor Ana": pct(s.av, s.tv),
+        "Valor Total": s.tv
+      };
+    });
+
+    const total = sum(master);
+    resumo.push({
+      "Tipo": "TOTAL GERAL",
+      "Quantidade Total": total.tc,
+      "Qtd. Flávio": total.fc,
+      "% Qtd. Flávio": pct(total.fc, total.tc),
+      "Valor Flávio": total.fv,
+      "% Valor Flávio": pct(total.fv, total.tv),
+      "Qtd. Ana": total.ac,
+      "% Qtd. Ana": pct(total.ac, total.tc),
+      "Valor Ana": total.av,
+      "% Valor Ana": pct(total.av, total.tv),
+      "Valor Total": total.tv
+    });
+
+    const resumoSheet = XLSX.utils.json_to_sheet(resumo);
+    resumoSheet["!cols"] = [
+      {wch: 24}, {wch: 17}, {wch: 14}, {wch: 15}, {wch: 18}, {wch: 16},
+      {wch: 12}, {wch: 14}, {wch: 18}, {wch: 15}, {wch: 18}
+    ];
+    XLSX.utils.book_append_sheet(workbook, resumoSheet, "RESUMO GERAL");
+
+    const nomesAbas = {
+      ALEATORIO: "ALEATORIO",
+      IMPROCEDENTE: "IMPROCEDENTE",
+      COMPROMETIDO: "COMPROMETIDO",
+      ED: "ED",
+      EF: "EF",
+      EP: "EP",
+      ANA: "ANA MULLER",
+      FLAVIO: "FLAVIO MARQUES",
+      NADJA: "NADJA-ANA",
+      "NADJA/FLAVIO": "NADJA-FLAVIO"
+    };
+
+    for (const group of ALL_GROUPS) {
+      const rows = groupRows(group);
+      if (!rows.length) continue;
+      const dados = rows.map(row => Object.fromEntries(cols.map(column => [
+        column,
+        column === "Valor da causa" ? parseBRL(row[column]) : (row[column] ?? "")
+      ])));
+      const sheet = XLSX.utils.json_to_sheet(dados, {header: cols});
+      sheet["!cols"] = [
+        {wch: 36}, {wch: 26}, {wch: 20}, {wch: 18}, {wch: 38}, {wch: 18}
+      ];
+      XLSX.utils.book_append_sheet(workbook, sheet, nomesAbas[group]);
+    }
+
+    const todos = master.map(row => Object.fromEntries(cols.map(column => [
+      column,
+      column === "Valor da causa" ? parseBRL(row[column]) : (row[column] ?? "")
+    ])));
+    const todosSheet = XLSX.utils.json_to_sheet(todos, {header: cols});
+    todosSheet["!cols"] = [
+      {wch: 36}, {wch: 26}, {wch: 20}, {wch: 18}, {wch: 38}, {wch: 18}
+    ];
+    XLSX.utils.book_append_sheet(workbook, todosSheet, "TODOS OS PROCESSOS");
+
+    return workbook;
+  }
+
   packageBtn.onclick = async () => {
     if (!batchDone) return modal("Atenção", "<p>Conclua todos os filtros antes de baixar os relatórios consolidados.</p>");
     try {
@@ -674,6 +757,11 @@ window.addEventListener("DOMContentLoaded", () => {
         if (rows.length) zip.file(`${name}.pdf`, makePDF(name, rows).output("arraybuffer"));
       }
       zip.file("RESUMO CONSOLIDADO.pdf", makePDF("Resumo Consolidado", master).output("arraybuffer"));
+
+      const excelWorkbook = buildBatchExcelWorkbook();
+      const excelArray = XLSX.write(excelWorkbook, {bookType: "xlsx", type: "array"});
+      zip.file(`RESUMO_GERAL_SORTEIO_${new Date().toISOString().slice(0, 10)}.xlsx`, excelArray);
+
       const blob = await zip.generateAsync({type: "blob"});
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
