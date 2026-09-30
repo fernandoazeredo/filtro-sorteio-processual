@@ -14,7 +14,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const labels = {
     ALEATORIO: "ALEATÓRIO",
     IMPROCEDENTE: "IMPROCEDENTE",
-    COMPROMETIDO: "COMPROMETIDO",
+    COMPROMETIDO: "Comprometido/Flavio",
     ED: "ED",
     EF: "EF",
     EP: "EP",
