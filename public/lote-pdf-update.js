@@ -16,13 +16,31 @@
   const pct=(a,b)=>b?`${((a/b)*100).toFixed(2)}%`:"0.00%";
   const typeGroup=v=>({ALEATORIO:"ALEATORIO",IMPROCEDENTE:"IMPROCEDENTE",COMPROMETIDO:"COMPROMETIDO",ED:"ED",EF:"EF",EP:"EP","ANA MULLER":"ANA","FLAVIO MARQUES":"FLAVIO","NADJA/ANA":"NADJA","NADJA/FLAVIO":"NADJA/FLAVIO"}[norm(v)]||"");
 
+  const field=(r,a)=>{const e=Object.entries(r||{});for(const x of a){const w=norm(x),f=e.find(([k])=>norm(k)===w);if(f)return f[1]??""}return""};
   function readRows(wb){
-    const sn=wb.SheetNames.find(n=>norm(n)==="BASE PARA SORTEIO")||wb.SheetNames[0]; if(!sn||!wb.Sheets[sn])throw Error("A planilha não possui uma aba válida para leitura.");
-    const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:"",raw:true}).filter(r=>String(r["Reclamante"]??r["Cliente"]??"").trim()); if(!raw.length)throw Error("Nenhum processo foi encontrado na planilha.");
-    const first=raw[0],hasReclamante=Object.prototype.hasOwnProperty.call(first,"Reclamante")||Object.prototype.hasOwnProperty.call(first,"Cliente");
-    const miss=["Número de CNJ","Tipo","Valor da causa","Última Decisão"].filter(c=>!Object.prototype.hasOwnProperty.call(first,c));if(!hasReclamante)miss.unshift("Reclamante");if(miss.length)throw Error(`Colunas obrigatórias ausentes: ${miss.join(", ")}.`);
-    return raw.map((r,i)=>{const g=typeGroup(r.Tipo);if(!g)throw Error(`Tipo inválido ou vazio na linha ${i+2}: ${r.Tipo||"(vazio)"}.`);return {"Reclamante":r["Reclamante"]??r["Cliente"]??"","Reclamada":r["Reclamada"]??"","Número de CNJ":r["Número de CNJ"]??"",Tipo:r.Tipo??"","Valor da causa":r["Valor da causa"]??"","Última Decisão":r["Última Decisão"]??"","Sorteado Para":"",__group:g}});
+    const sn=wb.SheetNames.find(n=>norm(n)==="BASE PARA SORTEIO")||wb.SheetNames[0];
+    if(!sn||!wb.Sheets[sn])throw Error("A planilha não possui uma aba válida para leitura.");
+
+    const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:"",raw:true});
+    const rows=raw.map(r=>({
+      "Reclamante":field(r,["Reclamante","Cliente","Nome do Reclamante"]),
+      "Reclamada":field(r,["Reclamada","Reclamado","Nome da Reclamada","Ré","Reu","Réu"]),
+      "Número de CNJ":field(r,["Número de CNJ","Numero de CNJ","CNJ","Nº","N°","Numero do Processo","Número do Processo"]),
+      "Tipo":field(r,["Tipo","Classificação","Classificacao","Categoria"]),
+      "Valor da causa":field(r,["Valor da causa","Valor da Causa","Valor"]),
+      "Última Decisão":field(r,["Última Decisão","Ultima Decisao","Última decisão","Decisão","Decisao"]),
+      "Sorteado Para":""
+    })).filter(r=>String(r["Reclamante"]||"").trim());
+
+    if(!rows.length)throw Error("Nenhum processo foi encontrado na planilha.");
+
+    return rows.map((r,i)=>{
+      const g=typeGroup(r.Tipo);
+      if(!g)throw Error(`Tipo inválido ou vazio na linha ${i+2}: ${r.Tipo||"(vazio)"}.`);
+      return {...r,__group:g};
+    });
   }
+
   const quota=rs=>{const f=Math.round(rs.length*QTARGET);return {f,a:rs.length-f}};
   const summary=rs=>{let ac=0,av=0,fc=0,fv=0;for(const r of rs){const v=parse(r["Valor da causa"]);if(r["Sorteado Para"]==="Ana"){ac++;av+=v}else if(r["Sorteado Para"]==="Flávio"){fc++;fv+=v}}return {ac,av,fc,fv,tc:ac+fc,tv:av+fv}};
   function fixed(rs,g){const n=FIXED_ANA.has(g)?"Ana":"Flávio";rs.forEach(r=>r["Sorteado Para"]=n)}
