@@ -1,8 +1,8 @@
 window.addEventListener("DOMContentLoaded", () => {
   const THEME_STORAGE_KEY = "filtroSorteioProcessual.theme.v2";
-  const SOURCE_COLS = ["Cliente", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
+  const SOURCE_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
   const DEFAULT_COLS = [...SOURCE_COLS, "Sorteado Para"];
-  const REQUIRED = [...SOURCE_COLS];
+  const REQUIRED = ["Reclamante", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
 
   const RANDOM_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "ED", "EF", "EP"];
   const FIXED_GROUPS = ["COMPROMETIDO", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO"];
@@ -168,17 +168,26 @@ window.addEventListener("DOMContentLoaded", () => {
     return map[type] || "";
   }
 
+  function normalizeSourceRow(row) {
+    return {
+      "Reclamante": row["Reclamante"] ?? row["Cliente"] ?? "",
+      "Reclamada": row["Reclamada"] ?? "",
+      "Número de CNJ": row["Número de CNJ"] ?? "",
+      "Tipo": row["Tipo"] ?? "",
+      "Valor da causa": row["Valor da causa"] ?? "",
+      "Última Decisão": row["Última Decisão"] ?? "",
+      "Sorteado Para": ""
+    };
+  }
+
   function sheetRows(workbook, sheetName) {
     if (!workbook.Sheets[sheetName]) return [];
     return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval: "", raw: true})
-      .filter(row => String(row.Cliente ?? "").trim());
+      .filter(row => String(row["Reclamante"] ?? row["Cliente"] ?? "").trim());
   }
 
   function onlyOperationalCols(row) {
-    const out = {};
-    SOURCE_COLS.forEach(column => out[column] = row[column] ?? "");
-    out["Sorteado Para"] = "";
-    return out;
+    return normalizeSourceRow(row);
   }
 
   function extractBase(workbook) {
@@ -188,7 +197,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
 
     const first = rows[0];
-    const missing = REQUIRED.filter(column => !Object.prototype.hasOwnProperty.call(first, column));
+    const hasReclamante = Object.prototype.hasOwnProperty.call(first, "Reclamante") || Object.prototype.hasOwnProperty.call(first, "Cliente");
+    const requiredSource = ["Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
+    const missing = requiredSource.filter(column => !Object.prototype.hasOwnProperty.call(first, column));
+    if (!hasReclamante) missing.unshift("Reclamante");
     if (missing.length) throw Error(`Colunas obrigatórias ausentes: ${missing.join(", ")}.`);
 
     const cleaned = rows.map(onlyOperationalCols);
@@ -339,7 +351,7 @@ window.addEventListener("DOMContentLoaded", () => {
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
-        modal("Planilha carregada", `<p><strong>${master.length}</strong> processos foram lidos da aba <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo utiliza somente: <strong>Cliente, Número de CNJ, Tipo, Valor da causa, Última Decisão e Sorteado Para</strong>. A coluna <strong>Sorteado Para</strong> foi zerada para este novo sorteio.</p>`);
+        modal("Planilha carregada", `<p><strong>${master.length}</strong> processos foram lidos da aba <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo utiliza: <strong>Reclamante, Reclamada, Número de CNJ, Tipo, Valor da causa, Última Decisão e Sorteado Para</strong>. A coluna <strong>Sorteado Para</strong> foi zerada para este novo sorteio.</p>`);
       } catch (error) {
         modal("Erro ao ler planilha", `<p>${error.message}</p>`);
         reset();
@@ -517,11 +529,11 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   $("sortAZ").onclick = () => {
-    filtered.sort((a, b) => String(a.Cliente || "").localeCompare(String(b.Cliente || ""), "pt-BR"));
+    filtered.sort((a, b) => String(a.Reclamante || "").localeCompare(String(b.Reclamante || ""), "pt-BR"));
     render(filtered);
   };
   $("sortZA").onclick = () => {
-    filtered.sort((a, b) => String(b.Cliente || "").localeCompare(String(a.Cliente || ""), "pt-BR"));
+    filtered.sort((a, b) => String(b.Reclamante || "").localeCompare(String(a.Reclamante || ""), "pt-BR"));
     render(filtered);
   };
   $("selectAllBtn").onclick = () => document.querySelectorAll(".rowCheckbox").forEach(box => box.checked = true);
