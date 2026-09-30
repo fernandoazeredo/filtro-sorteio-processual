@@ -7,7 +7,7 @@
     ["NADJA","NADJA/ANA","09 - NADJA-ANA"],["NADJA/FLAVIO","NADJA/FLÁVIO","10 - NADJA-FLÁVIO"]
   ];
   const RANDOM=new Set(["ALEATORIO","IMPROCEDENTE","ED","EF","EP"]), FIXED_ANA=new Set(["ANA","NADJA"]);
-  const REQ=["Cliente","Número de CNJ","Tipo","Valor da causa","Última Decisão"], COLS=[...REQ,"Sorteado Para"];
+  const REQ=["Reclamante","Reclamada","Número de CNJ","Tipo","Valor da causa","Última Decisão"], COLS=[...REQ,"Sorteado Para"];
   const QTARGET=.60, RANDOM_ATTEMPTS=4000, RANDOM_SWAP_PASSES=20, RANDOM_EARLY_TOLERANCE=.0001;
   const BLUE=[39,72,190],RED=[220,38,38],NAVY=[24,58,96],SLATE=[51,65,85],LBLUE=[76,132,197],ORANGE=[236,125,42];
   const norm=v=>String(v??"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toUpperCase().replace(/\s+/g," ").trim();
@@ -18,9 +18,10 @@
 
   function readRows(wb){
     const sn=wb.SheetNames.find(n=>norm(n)==="BASE PARA SORTEIO")||wb.SheetNames[0]; if(!sn||!wb.Sheets[sn])throw Error("A planilha não possui uma aba válida para leitura.");
-    const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:"",raw:true}).filter(r=>String(r.Cliente??"").trim()); if(!raw.length)throw Error("Nenhum processo foi encontrado na planilha.");
-    const miss=REQ.filter(c=>!Object.prototype.hasOwnProperty.call(raw[0],c)); if(miss.length)throw Error(`Colunas obrigatórias ausentes: ${miss.join(", ")}.`);
-    return raw.map((r,i)=>{const g=typeGroup(r.Tipo);if(!g)throw Error(`Tipo inválido ou vazio na linha ${i+2}: ${r.Tipo||"(vazio)"}.`);return {Cliente:r.Cliente??"","Número de CNJ":r["Número de CNJ"]??"",Tipo:r.Tipo??"","Valor da causa":r["Valor da causa"]??"","Última Decisão":r["Última Decisão"]??"","Sorteado Para":"",__group:g}});
+    const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:"",raw:true}).filter(r=>String(r["Reclamante"]??r["Cliente"]??"").trim()); if(!raw.length)throw Error("Nenhum processo foi encontrado na planilha.");
+    const first=raw[0],hasReclamante=Object.prototype.hasOwnProperty.call(first,"Reclamante")||Object.prototype.hasOwnProperty.call(first,"Cliente");
+    const miss=["Número de CNJ","Tipo","Valor da causa","Última Decisão"].filter(c=>!Object.prototype.hasOwnProperty.call(first,c));if(!hasReclamante)miss.unshift("Reclamante");if(miss.length)throw Error(`Colunas obrigatórias ausentes: ${miss.join(", ")}.`);
+    return raw.map((r,i)=>{const g=typeGroup(r.Tipo);if(!g)throw Error(`Tipo inválido ou vazio na linha ${i+2}: ${r.Tipo||"(vazio)"}.`);return {"Reclamante":r["Reclamante"]??r["Cliente"]??"","Reclamada":r["Reclamada"]??"","Número de CNJ":r["Número de CNJ"]??"",Tipo:r.Tipo??"","Valor da causa":r["Valor da causa"]??"","Última Decisão":r["Última Decisão"]??"","Sorteado Para":"",__group:g}});
   }
   const quota=rs=>{const f=Math.round(rs.length*QTARGET);return {f,a:rs.length-f}};
   const summary=rs=>{let ac=0,av=0,fc=0,fv=0;for(const r of rs){const v=parse(r["Valor da causa"]);if(r["Sorteado Para"]==="Ana"){ac++;av+=v}else if(r["Sorteado Para"]==="Flávio"){fc++;fv+=v}}return {ac,av,fc,fv,tc:ac+fc,tv:av+fv}};
@@ -64,7 +65,7 @@
   function head(doc,title,when){doc.setTextColor(18,45,92);doc.setFontSize(16);doc.setFont(undefined,"bold");doc.text(title,14,12);doc.setFont(undefined,"normal");doc.setFontSize(7.5);doc.setTextColor(90,100,115);doc.text(`Exportado em: ${when}`,14,18)}
   function footerName(rs){const s=summary(rs);if(s.fc&&s.ac)return "Sorteio";if(s.fc)return "Flávio";if(s.ac)return "Ana";return "Sorteio"}
   function metrics(doc,rs,v,s,c,y){doc.autoTable({startY:y,margin:{left:14,right:14},theme:"grid",head:[["Quantidade","Valor Total (R$)","% Quantidade","% Valor"]],body:[[String(rs.length),brl(v),pct(rs.length,s.tc),pct(v,s.tv)]],headStyles:{fillColor:c,textColor:255,halign:"center",fontStyle:"bold",fontSize:8},bodyStyles:{halign:"center",fontSize:8.5,fontStyle:"bold",textColor:[55,65,80]},styles:{cellPadding:2}});return doc.lastAutoTable.finalY+5}
-  function table(doc,name,category,rs,c,y){const start=doc.internal.getNumberOfPages(),body=[...rs].sort((a,b)=>String(a.Cliente||"").localeCompare(String(b.Cliente||""),"pt-BR")).map(r=>COLS.map(x=>x==="Valor da causa"?brl(r[x]):(r[x]??"")));doc.autoTable({startY:y,margin:{left:4,right:4,top:18,bottom:12},head:[COLS.map(x=>x==="Valor da causa"?"Valor da causa (R$)":x)],body,theme:"striped",headStyles:{fillColor:c,textColor:255,fontStyle:"bold",fontSize:6.2,cellPadding:1.1},styles:{fontSize:5.7,cellPadding:.85,overflow:"linebreak",textColor:[45,55,68],valign:"middle"},alternateRowStyles:{fillColor:[245,247,250]},columnStyles:{0:{cellWidth:70},1:{cellWidth:58},2:{cellWidth:27},3:{cellWidth:40},4:{cellWidth:54},5:{cellWidth:24}},didDrawPage:()=>{if(doc.internal.getNumberOfPages()>start){doc.setTextColor(...c);doc.setFontSize(8.5);doc.setFont(undefined,"bold");doc.text(`${name} — continuação | Categoria: ${category}`,6,9);doc.setTextColor(45,55,68)}}})}
+  function table(doc,name,category,rs,c,y){const start=doc.internal.getNumberOfPages(),body=[...rs].sort((a,b)=>String(a.Reclamante||"").localeCompare(String(b.Reclamante||""),"pt-BR")).map(r=>COLS.map(x=>x==="Valor da causa"?brl(r[x]):(r[x]??"")));doc.autoTable({startY:y,margin:{left:4,right:4,top:18,bottom:12},head:[COLS.map(x=>x==="Valor da causa"?"Valor da causa (R$)":x)],body,theme:"striped",headStyles:{fillColor:c,textColor:255,fontStyle:"bold",fontSize:6.2,cellPadding:1.1},styles:{fontSize:5.7,cellPadding:.85,overflow:"linebreak",textColor:[45,55,68],valign:"middle"},alternateRowStyles:{fillColor:[245,247,250]},columnStyles:{0:{cellWidth:49},1:{cellWidth:50},2:{cellWidth:45},3:{cellWidth:20},4:{cellWidth:31},5:{cellWidth:52},6:{cellWidth:24}},didDrawPage:()=>{if(doc.internal.getNumberOfPages()>start){doc.setTextColor(...c);doc.setFontSize(8.5);doc.setFont(undefined,"bold");doc.text(`${name} — continuação | Categoria: ${category}`,6,9);doc.setTextColor(45,55,68)}}})}
   function block(doc,title,name,category,rs,v,s,c,when,newPage){if(newPage)doc.addPage();const firstPage=doc.internal.getNumberOfPages();head(doc,title,when);doc.setFillColor(...c);doc.roundedRect(14,27,269,12,2,2,"F");doc.setTextColor(255);doc.setFontSize(12.5);doc.setFont(undefined,"bold");doc.text(name,19,35);const y=metrics(doc,rs,v,s,c,44);if(rs.length)table(doc,name,category,rs,c,y);window.FSPPdfFooter.markPages(doc,firstPage,doc.internal.getNumberOfPages(),footerName(rs))}
   function finalPage(doc,s){doc.addPage();const firstPage=doc.internal.getNumberOfPages();doc.setTextColor(18,45,92);doc.setFont(undefined,"bold");doc.setFontSize(17);doc.text("RESUMO CONSOLIDADO FINAL",14,18);doc.autoTable({startY:31,margin:{left:18,right:18},theme:"grid",head:[["Sócio","Quantidade","% Quantidade","Valor Total (R$)","% Valor"]],body:[["Flávio Marques",s.fc,pct(s.fc,s.tc),brl(s.fv),pct(s.fv,s.tv)],["Ana Paula Bonadiman Muller",s.ac,pct(s.ac,s.tc),brl(s.av),pct(s.av,s.tv)],["Total Geral",s.tc,s.tc?"100%":"0%",brl(s.tv),s.tv?"100%":"0%"]],headStyles:{fillColor:SLATE,textColor:255,halign:"center",fontStyle:"bold",fontSize:10},bodyStyles:{halign:"center",fontSize:10,textColor:[55,65,80],minCellHeight:17},columnStyles:{0:{fontStyle:"bold"}},styles:{cellPadding:3}});window.FSPPdfFooter.markPages(doc,firstPage,doc.internal.getNumberOfPages(),s.fc&&s.ac?"Sorteio":s.fc?"Flávio":s.ac?"Ana":"Sorteio")}
   function filterPdf(filter,rs){const doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"}),title=`Relatório - ${filter[1]}`,when=new Date().toLocaleString("pt-BR"),s=summary(rs),fr=rs.filter(r=>r["Sorteado Para"]==="Flávio"),ar=rs.filter(r=>r["Sorteado Para"]==="Ana");let used=false;if(fr.length){block(doc,title,"FLÁVIO MARQUES",filter[1],fr,s.fv,s,BLUE,when,false);used=true}if(ar.length){block(doc,title,"ANA PAULA BONADIMAN MULLER",filter[1],ar,s.av,s,RED,when,used);used=true}if(!used)head(doc,title,when);finalPage(doc,s);window.FSPPdfFooter.addFooters(doc,when,filter[1],footerName(rs));return doc}
@@ -118,7 +119,8 @@
       const rs=rows.filter(r=>r.__group===f[0]);
       if(!rs.length)continue;
       const data=rs.map(r=>({
-        "Cliente":r.Cliente??"",
+        "Reclamante":r.Reclamante??"",
+        "Reclamada":r.Reclamada??"",
         "Número de CNJ":r["Número de CNJ"]??"",
         "Tipo":r.Tipo??"",
         "Valor da causa":parse(r["Valor da causa"]),
@@ -126,13 +128,14 @@
         "Sorteado Para":r["Sorteado Para"]??""
       }));
       const ws=XLSX.utils.json_to_sheet(data,{header:COLS});
-      ws["!cols"]=[{wch:36},{wch:26},{wch:20},{wch:18},{wch:40},{wch:18}];
+      ws["!cols"]=[{wch:34},{wch:42},{wch:26},{wch:16},{wch:18},{wch:40},{wch:18}];
       let sn=f[2].replace(/^\d+\s*-\s*/,"").replace(/[\\/:*?"<>|]/g,"-").slice(0,31);
       XLSX.utils.book_append_sheet(wb,ws,sn);
     }
 
     const all=rows.map(r=>({
-      "Cliente":r.Cliente??"",
+      "Reclamante":r.Reclamante??"",
+        "Reclamada":r.Reclamada??"",
       "Número de CNJ":r["Número de CNJ"]??"",
       "Tipo":r.Tipo??"",
       "Valor da causa":parse(r["Valor da causa"]),
@@ -140,7 +143,7 @@
       "Sorteado Para":r["Sorteado Para"]??""
     }));
     const wsAll=XLSX.utils.json_to_sheet(all,{header:COLS});
-    wsAll["!cols"]=[{wch:36},{wch:26},{wch:20},{wch:18},{wch:40},{wch:18}];
+    wsAll["!cols"]=[{wch:34},{wch:42},{wch:26},{wch:16},{wch:18},{wch:40},{wch:18}];
     XLSX.utils.book_append_sheet(wb,wsAll,"TODOS OS PROCESSOS");
     return wb;
   }
