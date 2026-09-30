@@ -11,8 +11,8 @@ window.addEventListener("DOMContentLoaded", () => {
     </ol></section>
     <section class="tips-step"><h3><span>2</span> Classificação</h3><ol>
       <li>A única fonte de classificação é a coluna <strong>Tipo</strong>.</li>
-      <li>Tipos proporcionais: <strong>ALEATÓRIO, IMPROCEDENTE, COMPROMETIDO, ED, EF e EP</strong>.</li>
-      <li>Tipos fixos: <strong>ANA MULLER → Ana</strong>; <strong>FLÁVIO MARQUES → Flávio</strong>; <strong>NADJA/ANA → Ana</strong>; <strong>NADJA/FLÁVIO → Flávio</strong>.</li>
+      <li>Tipos proporcionais: <strong>ALEATÓRIO, IMPROCEDENTE, ED, EF e EP</strong>.</li>
+      <li>Tipos fixos: <strong>COMPROMETIDO → Flávio</strong>; <strong>ANA MULLER → Ana</strong>; <strong>FLÁVIO MARQUES → Flávio</strong>; <strong>NADJA/ANA → Ana</strong>; <strong>NADJA/FLÁVIO → Flávio</strong>.</li>
       <li><strong>Última Decisão</strong> é apenas informativa e não altera o Tipo.</li>
     </ol></section>
     <section class="tips-step"><h3><span>3</span> Execução</h3><ol>
