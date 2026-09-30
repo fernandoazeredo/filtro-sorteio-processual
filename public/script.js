@@ -168,14 +168,24 @@ window.addEventListener("DOMContentLoaded", () => {
     return map[type] || "";
   }
 
+  function sourceField(row, aliases) {
+    const entries = Object.entries(row || {});
+    for (const alias of aliases) {
+      const wanted = norm(alias);
+      const found = entries.find(([key]) => norm(key) === wanted);
+      if (found) return found[1] ?? "";
+    }
+    return "";
+  }
+
   function normalizeSourceRow(row) {
     return {
-      "Reclamante": row["Reclamante"] ?? row["Cliente"] ?? "",
-      "Reclamada": row["Reclamada"] ?? "",
-      "Número de CNJ": row["Número de CNJ"] ?? "",
-      "Tipo": row["Tipo"] ?? "",
-      "Valor da causa": row["Valor da causa"] ?? "",
-      "Última Decisão": row["Última Decisão"] ?? "",
+      "Reclamante": sourceField(row, ["Reclamante", "Cliente", "Nome do Reclamante"]),
+      "Reclamada": sourceField(row, ["Reclamada", "Reclamado", "Nome da Reclamada", "Ré", "Reu", "Réu"]),
+      "Número de CNJ": sourceField(row, ["Número de CNJ", "Numero de CNJ", "CNJ", "Nº", "N°", "Numero do Processo", "Número do Processo"]),
+      "Tipo": sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]),
+      "Valor da causa": sourceField(row, ["Valor da causa", "Valor da Causa", "Valor"]),
+      "Última Decisão": sourceField(row, ["Última Decisão", "Ultima Decisao", "Última decisão", "Decisão", "Decisao"]),
       "Sorteado Para": ""
     };
   }
@@ -183,7 +193,8 @@ window.addEventListener("DOMContentLoaded", () => {
   function sheetRows(workbook, sheetName) {
     if (!workbook.Sheets[sheetName]) return [];
     return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval: "", raw: true})
-      .filter(row => String(row["Reclamante"] ?? row["Cliente"] ?? "").trim());
+      .map(normalizeSourceRow)
+      .filter(row => String(row["Reclamante"] ?? "").trim());
   }
 
   function onlyOperationalCols(row) {
@@ -196,14 +207,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const rows = sheetRows(workbook, sheetName);
     if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
 
-    const first = rows[0];
-    const hasReclamante = Object.prototype.hasOwnProperty.call(first, "Reclamante") || Object.prototype.hasOwnProperty.call(first, "Cliente");
-    const requiredSource = ["Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
-    const missing = requiredSource.filter(column => !Object.prototype.hasOwnProperty.call(first, column));
-    if (!hasReclamante) missing.unshift("Reclamante");
-    if (missing.length) throw Error(`Colunas obrigatórias ausentes: ${missing.join(", ")}.`);
-
     const cleaned = rows.map(onlyOperationalCols);
+    const first = cleaned[0];
+    const missing = [];
+    if (!String(first["Reclamante"] ?? "").trim()) missing.push("Reclamante");
+    if (!String(first["Tipo"] ?? "").trim()) missing.push("Tipo");
+    if (missing.length) throw Error(`Colunas obrigatórias ausentes ou não reconhecidas: ${missing.join(", ")}.`);
     const invalid = cleaned
       .map((row, index) => ({line: index + 2, type: row.Tipo, group: typeToGroup(row.Tipo)}))
       .filter(item => !item.group);
