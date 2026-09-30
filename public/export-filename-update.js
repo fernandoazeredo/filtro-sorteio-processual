@@ -4,7 +4,7 @@
   const FILTER_NAMES = {
     "ALEATORIO": "ALEATÓRIO",
     "IMPROCEDENTE": "IMPROCEDENTE",
-    "COMPROMETIDO": "COMPROMETIDO",
+    "COMPROMETIDO": "Comprometido/Flavio",
     "ED": "ED",
     "EF": "EF",
     "EP": "EP",
