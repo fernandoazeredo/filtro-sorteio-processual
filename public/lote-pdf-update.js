@@ -77,7 +77,75 @@
     doc.autoTable({startY:52,margin:{left:4,right:4},theme:"grid",head:[["Categoria","Total","Qtd Flávio","% Qtd F.","Qtd Ana","% Qtd A.","Valor Flávio","% Valor F.","Valor Ana","% Valor A."]],body,headStyles:{fillColor:[69,119,190],textColor:255,halign:"center",fontStyle:"bold",fontSize:6.8},bodyStyles:{fontSize:6.6,textColor:[25,25,25],cellPadding:1.2},alternateRowStyles:{fillColor:[247,248,250]},columnStyles:{0:{cellWidth:36},1:{cellWidth:18,halign:"right"},2:{cellWidth:22,halign:"right"},3:{cellWidth:20,halign:"right"},4:{cellWidth:19,halign:"right"},5:{cellWidth:20,halign:"right"},6:{cellWidth:38,halign:"right"},7:{cellWidth:22,halign:"right"},8:{cellWidth:38,halign:"right"},9:{cellWidth:22,halign:"right"}}});doc.setFillColor(255,248,214);doc.rect(4,190,289,10,"F");doc.setTextColor(60);doc.setFont(undefined,"italic");doc.setFontSize(7);doc.text(`Gerado em ${now}. Filtros sorteáveis buscam individualmente 60% / 40% em quantidade e valor; COMPROMETIDO e demais grupos fixos permanecem integrais.`,6,196);window.FSPPdfFooter.addFooters(doc,now,"RESUMO CONSOLIDADO","Sorteio");return doc;
   }
 
+  function excelWorkbook(rows){
+    const wb=XLSX.utils.book_new();
+
+    const geral=FILTERS.map(f=>{
+      const rs=rows.filter(r=>r.__group===f[0]),s=summary(rs);
+      return {
+        "Categoria":f[1],
+        "Quantidade Total":s.tc,
+        "Qtd. Flávio":s.fc,
+        "% Qtd. Flávio":pct(s.fc,s.tc),
+        "Valor Flávio":s.fv,
+        "% Valor Flávio":pct(s.fv,s.tv),
+        "Qtd. Ana":s.ac,
+        "% Qtd. Ana":pct(s.ac,s.tc),
+        "Valor Ana":s.av,
+        "% Valor Ana":pct(s.av,s.tv),
+        "Valor Total":s.tv
+      };
+    });
+    const t=summary(rows);
+    geral.push({
+      "Categoria":"TOTAL GERAL",
+      "Quantidade Total":t.tc,
+      "Qtd. Flávio":t.fc,
+      "% Qtd. Flávio":pct(t.fc,t.tc),
+      "Valor Flávio":t.fv,
+      "% Valor Flávio":pct(t.fv,t.tv),
+      "Qtd. Ana":t.ac,
+      "% Qtd. Ana":pct(t.ac,t.tc),
+      "Valor Ana":t.av,
+      "% Valor Ana":pct(t.av,t.tv),
+      "Valor Total":t.tv
+    });
+    const wsResumo=XLSX.utils.json_to_sheet(geral);
+    wsResumo["!cols"]=[{wch:24},{wch:17},{wch:14},{wch:15},{wch:18},{wch:16},{wch:12},{wch:14},{wch:18},{wch:15},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,wsResumo,"RESUMO GERAL");
+
+    for(const f of FILTERS){
+      const rs=rows.filter(r=>r.__group===f[0]);
+      if(!rs.length)continue;
+      const data=rs.map(r=>({
+        "Cliente":r.Cliente??"",
+        "Número de CNJ":r["Número de CNJ"]??"",
+        "Tipo":r.Tipo??"",
+        "Valor da causa":parse(r["Valor da causa"]),
+        "Última Decisão":r["Última Decisão"]??"",
+        "Sorteado Para":r["Sorteado Para"]??""
+      }));
+      const ws=XLSX.utils.json_to_sheet(data,{header:COLS});
+      ws["!cols"]=[{wch:36},{wch:26},{wch:20},{wch:18},{wch:40},{wch:18}];
+      let sn=f[2].replace(/^\d+\s*-\s*/,"").replace(/[\\/:*?"<>|]/g,"-").slice(0,31);
+      XLSX.utils.book_append_sheet(wb,ws,sn);
+    }
+
+    const all=rows.map(r=>({
+      "Cliente":r.Cliente??"",
+      "Número de CNJ":r["Número de CNJ"]??"",
+      "Tipo":r.Tipo??"",
+      "Valor da causa":parse(r["Valor da causa"]),
+      "Última Decisão":r["Última Decisão"]??"",
+      "Sorteado Para":r["Sorteado Para"]??""
+    }));
+    const wsAll=XLSX.utils.json_to_sheet(all,{header:COLS});
+    wsAll["!cols"]=[{wch:36},{wch:26},{wch:20},{wch:18},{wch:40},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,wsAll,"TODOS OS PROCESSOS");
+    return wb;
+  }
+
   async function zipLib(){if(window.JSZip)return;await new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=ok;s.onerror=()=>no(Error("Falha ao carregar o componente ZIP."));document.head.appendChild(s)})}
-  async function run(btn){const input=document.getElementById("excelFile"),file=input?.files?.[0];if(!file)return alert("Selecione primeiro a planilha do novo sorteio.");if(!window.XLSX||!window.jspdf?.jsPDF)return alert("Os componentes de Excel/PDF ainda não foram carregados. Atualize a página e tente novamente.");if(!confirm("Gerar o SORTEIO EM LOTE, reutilizando as atribuições já realizadas e sorteando somente os filtros pendentes em 60% / 40%, com os grupos fixos integrais?"))return;const old=btn.textContent;btn.disabled=true;btn.textContent="Processando SORTEIO EM LOTE...";try{await zipLib();const rows=window.FSPDrawState.completeForBatch(file);const zip=new JSZip();let n=0;for(const f of FILTERS){const rs=rows.filter(r=>r.__group===f[0]);if(!rs.length)continue;n+=rs.length;zip.file(`${f[2]}.pdf`,filterPdf(f,rs).output("arraybuffer"))}if(n!==rows.length)throw Error(`${rows.length-n} processo(s) ficaram fora dos relatórios.`);zip.file("11 - RESUMO CONSOLIDADO.pdf",summaryPdf(rows).output("arraybuffer"));const blob=await zip.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`SORTEIO_COMPLETO_RELATORIOS_${new Date().toISOString().slice(0,10)}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);const s=summary(rows);alert(`SORTEIO EM LOTE concluído. ${rows.length} processos foram atribuídos. Quantidade: Flávio ${pct(s.fc,s.tc)} / Ana ${pct(s.ac,s.tc)}. Valor consolidado: Flávio ${pct(s.fv,s.tv)} / Ana ${pct(s.av,s.tv)}.`)}catch(e){alert(`Erro no SORTEIO EM LOTE: ${e.message}`)}finally{btn.textContent="SORTEIO EM LOTE";btn.disabled=!input.files?.[0]}}
+  async function run(btn){const input=document.getElementById("excelFile"),file=input?.files?.[0];if(!file)return alert("Selecione primeiro a planilha do novo sorteio.");if(!window.XLSX||!window.jspdf?.jsPDF)return alert("Os componentes de Excel/PDF ainda não foram carregados. Atualize a página e tente novamente.");if(!confirm("Gerar o SORTEIO EM LOTE, reutilizando as atribuições já realizadas e sorteando somente os filtros pendentes em 60% / 40%, com os grupos fixos integrais?"))return;const old=btn.textContent;btn.disabled=true;btn.textContent="Processando SORTEIO EM LOTE...";try{await zipLib();const rows=window.FSPDrawState.completeForBatch(file);const zip=new JSZip();let n=0;for(const f of FILTERS){const rs=rows.filter(r=>r.__group===f[0]);if(!rs.length)continue;n+=rs.length;zip.file(`${f[2]}.pdf`,filterPdf(f,rs).output("arraybuffer"))}if(n!==rows.length)throw Error(`${rows.length-n} processo(s) ficaram fora dos relatórios.`);zip.file("11 - RESUMO CONSOLIDADO.pdf",summaryPdf(rows).output("arraybuffer"));const wb=excelWorkbook(rows);const xlsx=XLSX.write(wb,{bookType:"xlsx",type:"array"});zip.file(`12 - RESUMO GERAL SORTEIO ${new Date().toISOString().slice(0,10)}.xlsx`,xlsx);const blob=await zip.generateAsync({type:"blob"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`SORTEIO_COMPLETO_RELATORIOS_${new Date().toISOString().slice(0,10)}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);const s=summary(rows);alert(`SORTEIO EM LOTE concluído. ${rows.length} processos foram atribuídos. Quantidade: Flávio ${pct(s.fc,s.tc)} / Ana ${pct(s.ac,s.tc)}. Valor consolidado: Flávio ${pct(s.fv,s.tv)} / Ana ${pct(s.av,s.tv)}.`)}catch(e){alert(`Erro no SORTEIO EM LOTE: ${e.message}`)}finally{btn.textContent="SORTEIO EM LOTE";btn.disabled=!input.files?.[0]}}
   addEventListener("DOMContentLoaded",()=>{const b=document.getElementById("packageBtn"),i=document.getElementById("excelFile");if(!b||!i)return;b.onclick=null;b.textContent="SORTEIO EM LOTE";b.title="Reutiliza as atribuições existentes e sorteia os filtros pendentes em 60% / 40%; os grupos fixos permanecem integrais.";b.addEventListener("click",()=>run(b));const sync=()=>b.disabled=!i.files?.[0];i.addEventListener("change",()=>setTimeout(sync,0));new MutationObserver(()=>{if(i.files?.[0]&&b.disabled&&b.textContent!=="Processando SORTEIO EM LOTE...")b.disabled=false;if(!i.files?.[0]&&!b.disabled)b.disabled=true}).observe(b,{attributes:true,attributeFilter:["disabled"]});sync()});
 })();
