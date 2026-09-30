@@ -519,7 +519,31 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const reportCols = () => DEFAULT_COLS;
 
-  function partnerSection(doc, title, rows, y, headFillColor) {
+  function pdfFooterName(rows) {
+    const s = sum(rows);
+    if (s.fc && s.ac) return "Sorteio (ambos)";
+    if (s.fc) return "Flávio Marques";
+    if (s.ac) return "Ana Paula Bonadiman Muller";
+    return "Sem atribuição";
+  }
+
+  function addPdfFooters(doc, when, category, name) {
+    const pages = doc.internal.getNumberOfPages();
+    const width = doc.internal.pageSize.getWidth();
+    const height = doc.internal.pageSize.getHeight();
+    for (let page = 1; page <= pages; page++) {
+      doc.setPage(page);
+      doc.setDrawColor(205, 211, 220);
+      doc.setLineWidth(0.2);
+      doc.line(14, height - 9, width - 14, height - 9);
+      doc.setFont(undefined, "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(90, 100, 115);
+      doc.text(`Exportado: ${when} | Categoria: ${category} | Nome: ${name}`, 14, height - 4.5);
+    }
+  }
+
+  function partnerSection(doc, title, category, rows, y, headFillColor) {
     const cols = reportCols();
     doc.setFillColor(...headFillColor);
     doc.setTextColor(255, 255, 255);
@@ -530,6 +554,7 @@ window.addEventListener("DOMContentLoaded", () => {
     y += 10;
 
     doc.setTextColor(20, 30, 45);
+    const startPage = doc.internal.getNumberOfPages();
     doc.autoTable({
       startY: y,
       head: [cols.map(c => c === "Valor da causa" ? "Valor da causa (R$)" : c)],
@@ -537,13 +562,23 @@ window.addEventListener("DOMContentLoaded", () => {
       theme: "striped",
       headStyles: {fillColor: headFillColor, textColor: 255, fontSize: 6.5},
       styles: {fontSize: 6.2, cellPadding: 1.2},
-      margin: {left: 14, right: 14}
+      margin: {left: 14, right: 14, top: 18, bottom: 12},
+      didDrawPage: () => {
+        if (doc.internal.getNumberOfPages() > startPage) {
+          doc.setTextColor(...headFillColor);
+          doc.setFontSize(8.5);
+          doc.setFont(undefined, "bold");
+          doc.text(`${title} — continuação | Categoria: ${category}`, 14, 9);
+          doc.setTextColor(20, 30, 45);
+        }
+      }
     });
     return doc.lastAutoTable.finalY + 6;
   }
 
-  function makePDF(title, rows) {
+  function makePDF(title, rows, category = title.replace(/^Relatório -\s*/, "")) {
     const doc = new jspdf.jsPDF({orientation: "landscape"});
+    const when = new Date().toLocaleString("pt-BR");
     doc.setFontSize(13);
     doc.setTextColor(18, 45, 92);
     doc.setFont(undefined, "bold");
@@ -551,16 +586,16 @@ window.addEventListener("DOMContentLoaded", () => {
     doc.setFont(undefined, "normal");
     doc.setFontSize(8);
     doc.setTextColor(90, 100, 115);
-    doc.text(`Exportado em: ${new Date().toLocaleString("pt-BR")}`, 14, 18);
+    doc.text(`Exportado em: ${when}`, 14, 18);
 
     const flavioRows = rows.filter(row => partner(row) === "Flávio");
     const anaRows = rows.filter(row => partner(row) === "Ana");
     let y = 23;
 
-    if (flavioRows.length) y = partnerSection(doc, "FLÁVIO MARQUES", flavioRows, y, [39, 72, 190]);
+    if (flavioRows.length) y = partnerSection(doc, "FLÁVIO MARQUES", category, flavioRows, y, [39, 72, 190]);
     if (anaRows.length) {
       if (y > 150) { doc.addPage(); y = 18; }
-      y = partnerSection(doc, "ANA PAULA BONADIMAN MULLER", anaRows, y, [220, 38, 38]);
+      y = partnerSection(doc, "ANA PAULA BONADIMAN MULLER", category, anaRows, y, [220, 38, 38]);
     }
 
     const s = sum(rows);
@@ -580,6 +615,7 @@ window.addEventListener("DOMContentLoaded", () => {
       headStyles: {fillColor: [51, 65, 85], textColor: 255},
       styles: {fontSize: 8}
     });
+    addPdfFooters(doc, when, category, pdfFooterName(rows));
     return doc;
   }
 
@@ -590,7 +626,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("exportPDF").onclick = () => {
     if (!filtered.length) return modal("Sem dados", "<p>Nenhum dado para exportar.</p>");
     const filterName = activeFilter ? labels[activeFilter] : "TODOS";
-    makePDF(activeFilter ? `Relatório - ${filterName}` : "Relatório de Processos", filtered).save(`PROCESSOS - ${safeReportName(filterName)}.pdf`);
+    makePDF(activeFilter ? `Relatório - ${filterName}` : "Relatório de Processos", filtered, filterName).save(`PROCESSOS - ${safeReportName(filterName)}.pdf`);
   };
 
   $("exportXLSX").onclick = () => {
