@@ -132,6 +132,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const controls = document.querySelector(".controls");
   const colBtn = document.createElement("button");
   const previewBtn = document.createElement("button");
+  const addProcessBtn = document.createElement("button");
   const saveBaseBtn = document.createElement("button");
   const packageBtn = document.createElement("button");
   colBtn.className = "btn btn-roxo";
@@ -142,6 +143,11 @@ window.addEventListener("DOMContentLoaded", () => {
   previewBtn.type = "button";
   previewBtn.textContent = "Conferir Grupos";
   previewBtn.disabled = true;
+  addProcessBtn.className = "btn btn-azul";
+  addProcessBtn.type = "button";
+  addProcessBtn.textContent = "➕ ADICIONAR PROCESSO";
+  addProcessBtn.disabled = true;
+  addProcessBtn.title = "Adiciona uma nova linha seguindo o modelo da Base Sorteio";
   saveBaseBtn.className = "btn btn-neutral";
   saveBaseBtn.type = "button";
   saveBaseBtn.textContent = "BAIXAR BASE ATUALIZADA";
@@ -154,6 +160,7 @@ window.addEventListener("DOMContentLoaded", () => {
   packageBtn.disabled = true;
   controls.insertBefore(colBtn, $("applyFilterBtn"));
   controls.insertBefore(previewBtn, $("applyFilterBtn"));
+  controls.insertBefore(addProcessBtn, $("applyFilterBtn"));
   controls.insertBefore(saveBaseBtn, $("applyFilterBtn"));
   controls.appendChild(packageBtn);
 
@@ -374,6 +381,7 @@ window.addEventListener("DOMContentLoaded", () => {
         batchDone = false;
         colBtn.disabled = false;
         previewBtn.disabled = false;
+        addProcessBtn.disabled = false;
         saveBaseBtn.disabled = false;
         packageBtn.disabled = true;
         render(filtered);
@@ -827,6 +835,123 @@ window.addEventListener("DOMContentLoaded", () => {
     return String(name || "TODOS").replace(/[\\/:*?"<>|]/g, "-");
   }
 
+  addProcessBtn.onclick = () => {
+    if (!master.length) return modal("Sem base carregada", "<p>Selecione primeiro a Base Sorteio.</p>");
+
+    ensureModal();
+    const modalBox = $("fspModal");
+    const confirm = $("fspModalConfirm");
+    $("fspModalTitle").textContent = "Adicionar processo";
+    $("fspModalBody").innerHTML = `
+      <p>Preencha os campos conforme o modelo da <strong>Base Sorteio</strong>.</p>
+      <div class="fsp-add-grid">
+        <label>Reclamante<input id="fspAddReclamante" class="input-text" type="text"></label>
+        <label>Reclamada<input id="fspAddReclamada" class="input-text" type="text"></label>
+        <label>Número de CNJ<input id="fspAddCNJ" class="input-text" type="text" placeholder="Pode ficar vazio"></label>
+        <label>Tipo
+          <select id="fspAddTipo" class="input-text">
+            <option value="">Escolha...</option>
+            <option value="ALEATÓRIO">ALEATÓRIO</option>
+            <option value="IMPROCEDENTE">IMPROCEDENTE</option>
+            <option value="COMPROMETIDO">COMPROMETIDO</option>
+            <option value="ED">ED</option>
+            <option value="EF">EF</option>
+            <option value="EP">EP</option>
+            <option value="ANA MULLER">ANA MULLER</option>
+            <option value="FLÁVIO MARQUES">FLÁVIO MARQUES</option>
+            <option value="NADJA/ANA">NADJA/ANA</option>
+            <option value="NADJA/FLÁVIO">NADJA/FLÁVIO</option>
+          </select>
+        </label>
+        <label>Valor da causa<input id="fspAddValor" class="input-text" type="text" placeholder="Ex.: 125000,00"></label>
+        <label>Última Decisão<textarea id="fspAddDecisao" class="input-text" rows="3"></textarea></label>
+        <label>Sorteado Para
+          <select id="fspAddSorteado" class="input-text">
+            <option value="">Em branco</option>
+            <option value="Flávio">Flávio</option>
+            <option value="Ana">Ana</option>
+          </select>
+        </label>
+      </div>
+      <p id="fspAddError" class="fsp-warn" hidden></p>
+    `;
+
+    if (!document.getElementById("fspAddStyle")) {
+      const style = document.createElement("style");
+      style.id = "fspAddStyle";
+      style.textContent = `
+        .fsp-add-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+        .fsp-add-grid label{display:flex;flex-direction:column;gap:6px;font-weight:600}
+        .fsp-add-grid textarea{resize:vertical;min-height:76px}
+        @media(max-width:700px){.fsp-add-grid{grid-template-columns:1fr}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    confirm.hidden = false;
+    confirm.textContent = "Adicionar";
+    modalBox.hidden = false;
+    document.body.classList.add("modal-open");
+
+    const close = () => {
+      modalBox.hidden = true;
+      document.body.classList.remove("modal-open");
+    };
+
+    $("fspModalX").onclick = close;
+    $("fspModalCancel").onclick = close;
+    modalBox.querySelector(".fsp-modal-backdrop").onclick = close;
+
+    confirm.onclick = () => {
+      const reclamante = $("fspAddReclamante").value.trim();
+      const reclamada = $("fspAddReclamada").value.trim();
+      const cnj = $("fspAddCNJ").value.trim();
+      const tipo = $("fspAddTipo").value.trim();
+      const valor = $("fspAddValor").value.trim();
+      const decisao = $("fspAddDecisao").value.trim();
+      const sorteado = $("fspAddSorteado").value.trim();
+      const error = $("fspAddError");
+
+      if (!reclamante) {
+        error.textContent = "Informe o Reclamante.";
+        error.hidden = false;
+        return;
+      }
+      if (!tipo || !typeToGroup(tipo)) {
+        error.textContent = "Selecione um Tipo válido.";
+        error.hidden = false;
+        return;
+      }
+
+      const novo = {
+        "Reclamante": reclamante,
+        "Reclamada": reclamada,
+        "Número de CNJ": cnj,
+        "Tipo": tipo,
+        "Valor da causa": valor,
+        "Última Decisão": decisao,
+        "Sorteado Para": sorteado
+      };
+
+      master.push(novo);
+      buildGroups();
+
+      activeFilter = "";
+      $("filterInput").value = "";
+      $("searchInput").value = "";
+      filtered = [...master];
+
+      batchDone = master.length > 0 && master.every(row => partner(row));
+      packageBtn.disabled = !batchDone;
+
+      render(filtered);
+      summaryUI(filtered);
+      close();
+
+      modal("Processo adicionado", `<p class="fsp-ok">O processo de <strong>${esc(reclamante)}</strong> foi incluído na Base Sorteio.</p><p>Total atual: <strong>${master.length}</strong> processos.</p>`);
+    };
+  };
+
   saveBaseBtn.onclick = () => {
     if (!master.length) return modal("Sem base carregada", "<p>Selecione uma planilha antes de baixar a base atualizada.</p>");
     try {
@@ -1008,6 +1133,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("tableBody").innerHTML = "";
     colBtn.disabled = true;
     previewBtn.disabled = true;
+    addProcessBtn.disabled = true;
     saveBaseBtn.disabled = true;
     packageBtn.disabled = true;
     summaryUI([]);
