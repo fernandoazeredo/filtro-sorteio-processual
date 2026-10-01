@@ -56,6 +56,21 @@
     <div class="tabela-area" role="region" aria-label="Tabela de processos" tabindex="0"><table id="mainTable"><thead><tr id="headerRow"></tr></thead><tbody id="tableBody"></tbody></table></div>
     <section class="resumo-area" aria-labelledby="resumoTitulo"><h3 id="resumoTitulo">Resumo Consolidado por Sócio</h3><div class="resumo-scroll" role="region" aria-label="Resumo consolidado" tabindex="0"><table class="resumo-tabela"><thead><tr><th>Sócio</th><th>Quantidade</th><th>Percentual (%)</th><th>Valor Total (R$)</th><th>Percentual (%)</th></tr></thead><tbody><tr><td>Ana</td><td id="qtdAna">0</td><td id="percentAna">0%</td><td id="valorAna">R$ 0,00</td><td id="percentValorAna">0%</td></tr><tr><td>Flávio</td><td id="qtdFlavio">0</td><td id="percentFlavio">0%</td><td id="valorFlavio">R$ 0,00</td><td id="percentValorFlavio">0%</td></tr><tr class="linha-total"><td><strong>Total Geral</strong></td><td id="qtdTotal"><strong>0</strong></td><td id="percentTotal"><strong>100%</strong></td><td id="valorTotal"><strong>R$ 0,00</strong></td><td id="percentTotalValor"><strong>100%</strong></td></tr></tbody></table></div></section>
   </main>
-  <div id="tipsDialog" class="tips-modal" hidden><div class="tips-backdrop" data-close-tips></div><section class="tips-panel" role="dialog" aria-modal="true" aria-labelledby="tipsTitle" aria-describedby="tipsIntro" tabindex="-1"><header class="tips-header"><div><p class="tips-eyebrow">GUIA DO APLICATIVO</p><h2 id="tipsTitle">Dicas de uso</h2></div><button id="tipsCloseBtn" class="tips-close" type="button" aria-label="Fechar dicas">×</button></header><div class="tips-content"><p id="tipsIntro" class="tips-intro">Carregue a planilha do novo sorteio.</p></div><footer class="tips-footer"><button id="tipsCloseFooterBtn" class="btn btn-neutral" type="button">Fechar</button></footer></section></div>
+  <div id="tipsDialog" class="tips-modal" hidden><div class="tips-backdrop" data-close-tips></div><section class="tips-panel" role="dialog" aria-modal="true" aria-labelledby="tipsTitle" aria-describedby="tipsIntro" tabindex="-1"><header class="tips-header"><div><p class="tips-eyebrow">GUIA DO APLICATIVO</p><h2 id="tipsTitle">Dicas de uso</h2></div><button id="tipsCloseBtn" class="tips-close" type="button" aria-label="Fechar dicas">×</button></header><div class="tips-content">
+  <p id="tipsIntro" class="tips-intro">Use a <strong>Base Sorteio</strong> atualizada para carregar e administrar os processos diretamente no aplicativo.</p>
+  <ol class="tips-list">
+    <li><strong>Selecionar Excel:</strong> carregue a Base Sorteio com as colunas Reclamante, Reclamada, Número de CNJ, Tipo, Valor da causa, Última Decisão e Sorteado Para.</li>
+    <li><strong>Filtro (Tipo):</strong> filtra exclusivamente pela coluna Tipo da base.</li>
+    <li><strong>Buscar:</strong> pesquisa o texto informado nos dados dos processos exibidos.</li>
+    <li><strong>Editar:</strong> use o botão ✏️ na coluna Ações para liberar uma linha, faça os ajustes e clique em 💾 Salvar.</li>
+    <li><strong>Excluir:</strong> use o botão 🗑️ na coluna Ações. O aplicativo pedirá confirmação antes da exclusão.</li>
+    <li><strong>Adicionar Processo:</strong> inclui uma nova linha seguindo exatamente o modelo da Base Sorteio. O CNJ pode ficar em branco.</li>
+    <li><strong>Baixar Base Atualizada:</strong> gera um novo arquivo XLSX com todas as inclusões, alterações e exclusões feitas no aplicativo.</li>
+    <li><strong>Conferir Grupos:</strong> mostra como os processos foram separados conforme o Tipo antes do sorteio.</li>
+    <li><strong>Executar Sorteio por filtro:</strong> processa somente o Tipo atualmente selecionado.</li>
+    <li><strong>Sorteio em Lote:</strong> processa todos os grupos e gera os relatórios PDF, o resumo consolidado e o Excel do sorteio.</li>
+  </ol>
+  <p class="fsp-warn"><strong>Atenção:</strong> alterações feitas na tela passam a valer na sessão atual. Para preservá-las em arquivo, use <strong>BAIXAR BASE ATUALIZADA</strong>.</p>
+</div><footer class="tips-footer"><button id="tipsCloseFooterBtn" class="btn btn-neutral" type="button">Fechar</button></footer></section></div>
 </body>
 </html>
