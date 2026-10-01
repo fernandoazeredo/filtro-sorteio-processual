@@ -132,6 +132,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const controls = document.querySelector(".controls");
   const colBtn = document.createElement("button");
   const previewBtn = document.createElement("button");
+  const saveBaseBtn = document.createElement("button");
   const packageBtn = document.createElement("button");
   colBtn.className = "btn btn-roxo";
   colBtn.type = "button";
@@ -141,6 +142,11 @@ window.addEventListener("DOMContentLoaded", () => {
   previewBtn.type = "button";
   previewBtn.textContent = "Conferir Grupos";
   previewBtn.disabled = true;
+  saveBaseBtn.className = "btn btn-neutral";
+  saveBaseBtn.type = "button";
+  saveBaseBtn.textContent = "BAIXAR BASE ATUALIZADA";
+  saveBaseBtn.disabled = true;
+  saveBaseBtn.title = "Baixa em XLSX todas as alterações feitas diretamente na tabela.";
   packageBtn.className = "btn btn-azul";
   packageBtn.type = "button";
   packageBtn.id = "packageBtn";
@@ -148,7 +154,17 @@ window.addEventListener("DOMContentLoaded", () => {
   packageBtn.disabled = true;
   controls.insertBefore(colBtn, $("applyFilterBtn"));
   controls.insertBefore(previewBtn, $("applyFilterBtn"));
+  controls.insertBefore(saveBaseBtn, $("applyFilterBtn"));
   controls.appendChild(packageBtn);
+
+  const editStyle = document.createElement("style");
+  editStyle.textContent = `
+    #tableBody td.fsp-editable{cursor:text;outline:none;transition:box-shadow .15s,background .15s}
+    #tableBody td.fsp-editable:hover{box-shadow:inset 0 0 0 1px #60a5fa}
+    #tableBody td.fsp-editable:focus{box-shadow:inset 0 0 0 2px #2563eb;background:color-mix(in srgb,#dbeafe 55%,var(--surface))}
+    #tableBody td.fsp-edited{box-shadow:inset 3px 0 0 #16a34a}
+  `;
+  document.head.appendChild(editStyle);
   $("drawBtn").textContent = "Executar Sorteio por filtro";
 
   function typeToGroup(value) {
@@ -357,6 +373,7 @@ window.addEventListener("DOMContentLoaded", () => {
         batchDone = false;
         colBtn.disabled = false;
         previewBtn.disabled = false;
+        saveBaseBtn.disabled = false;
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
@@ -438,6 +455,48 @@ window.addEventListener("DOMContentLoaded", () => {
     modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Somente este Tipo será processado. Os demais permanecerão inalterados.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
   };
 
+  function commitCellEdit(td, row, column, previous) {
+    let value = td.textContent.trim();
+
+    if (column === "Reclamante" && !value) {
+      td.textContent = previous;
+      return modal("Reclamante obrigatório", "<p>O campo <strong>Reclamante</strong> não pode ficar vazio.</p>");
+    }
+
+    if (column === "Tipo") {
+      const group = typeToGroup(value);
+      if (!group) {
+        td.textContent = previous;
+        return modal("Tipo inválido", `<p>O Tipo <strong>${esc(value || "(vazio)")}</strong> não é reconhecido. Use uma das classificações válidas do aplicativo.</p>`);
+      }
+      row[column] = value;
+      buildGroups();
+      if (activeFilter) filtered = groupRows(activeFilter);
+    } else if (column === "Sorteado Para") {
+      const p = norm(value);
+      if (p && !p.includes("ANA") && !p.includes("FLAVIO")) {
+        td.textContent = previous;
+        return modal("Sócio inválido", "<p>Em <strong>Sorteado Para</strong>, use <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
+      }
+      row[column] = value;
+    } else if (column === "Valor da causa") {
+      row[column] = value;
+    } else {
+      row[column] = value;
+    }
+
+    batchDone = master.length > 0 && master.every(r => partner(r));
+    packageBtn.disabled = !batchDone;
+    td.classList.add("fsp-edited");
+    summaryUI(filtered);
+
+    if (column === "Tipo" && activeFilter) {
+      setTimeout(() => render(filtered), 0);
+    } else if (column === "Valor da causa") {
+      td.textContent = brl(row[column]);
+    }
+  }
+
   function render(data) {
     const header = $("headerRow");
     const body = $("tableBody");
@@ -470,7 +529,34 @@ window.addEventListener("DOMContentLoaded", () => {
 
       cols.forEach(column => {
         const td = document.createElement("td");
+        td.className = "fsp-editable";
+        td.contentEditable = "true";
+        td.spellcheck = false;
+        td.title = "Clique para editar";
         td.textContent = column === "Valor da causa" ? brl(row[column]) : (row[column] ?? "");
+
+        td.addEventListener("focus", () => {
+          td.dataset.previous = String(row[column] ?? "");
+          if (column === "Valor da causa") td.textContent = String(row[column] ?? "");
+        });
+
+        td.addEventListener("keydown", event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            td.blur();
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            td.textContent = td.dataset.previous ?? "";
+            td.blur();
+          }
+        });
+
+        td.addEventListener("blur", () => {
+          const previous = td.dataset.previous ?? String(row[column] ?? "");
+          commitCellEdit(td, row, column, previous);
+        });
+
         tr.appendChild(td);
       });
       body.appendChild(tr);
@@ -653,6 +739,27 @@ window.addEventListener("DOMContentLoaded", () => {
     return String(name || "TODOS").replace(/[\\/:*?"<>|]/g, "-");
   }
 
+  saveBaseBtn.onclick = () => {
+    if (!master.length) return modal("Sem base carregada", "<p>Selecione uma planilha antes de baixar a base atualizada.</p>");
+    try {
+      const cols = DEFAULT_COLS;
+      const rows = master.map(row => Object.fromEntries(cols.map(column => [
+        column,
+        column === "Valor da causa" ? parseBRL(row[column]) : (row[column] ?? "")
+      ])));
+      const workbook = XLSX.utils.book_new();
+      const sheet = XLSX.utils.json_to_sheet(rows, {header: cols});
+      sheet["!cols"] = [
+        {wch: 38}, {wch: 48}, {wch: 27}, {wch: 18}, {wch: 20}, {wch: 48}, {wch: 20}
+      ];
+      XLSX.utils.book_append_sheet(workbook, sheet, "BASE PARA SORTEIO");
+      XLSX.writeFile(workbook, `BASE_SORTEIO_ATUALIZADA_${new Date().toISOString().slice(0,10)}.xlsx`);
+      modal("Base atualizada gerada", `<p class="fsp-ok"><strong>${master.length}</strong> processos foram exportados com as alterações feitas diretamente no aplicativo.</p>`);
+    } catch (error) {
+      modal("Erro ao gerar base", `<p>${esc(error.message)}</p>`);
+    }
+  };
+
   $("exportPDF").onclick = () => {
     if (!filtered.length) return modal("Sem dados", "<p>Nenhum dado para exportar.</p>");
     const filterName = activeFilter ? labels[activeFilter] : "TODOS";
@@ -813,6 +920,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("tableBody").innerHTML = "";
     colBtn.disabled = true;
     previewBtn.disabled = true;
+    saveBaseBtn.disabled = true;
     packageBtn.disabled = true;
     summaryUI([]);
   }
