@@ -159,10 +159,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const editStyle = document.createElement("style");
   editStyle.textContent = `
-    #tableBody td.fsp-editable{cursor:text;outline:none;transition:box-shadow .15s,background .15s}
-    #tableBody td.fsp-editable:hover{box-shadow:inset 0 0 0 1px #60a5fa}
-    #tableBody td.fsp-editable:focus{box-shadow:inset 0 0 0 2px #2563eb;background:color-mix(in srgb,#dbeafe 55%,var(--surface))}
-    #tableBody td.fsp-edited{box-shadow:inset 3px 0 0 #16a34a}
+    #tableBody td.fsp-editing{cursor:text;outline:none;background:color-mix(in srgb,#dbeafe 45%,var(--surface));box-shadow:inset 0 0 0 1px #93c5fd}
+    #tableBody td.fsp-editing:focus{box-shadow:inset 0 0 0 2px #2563eb}
+    #tableBody .fsp-actions{display:flex;gap:6px;align-items:center}
+    #tableBody .fsp-actions .btn{padding:6px 9px;font-size:12px}
+    #tableBody .fsp-cancel-row{min-width:70px}
   `;
   document.head.appendChild(editStyle);
   $("drawBtn").textContent = "Executar Sorteio por filtro";
@@ -455,45 +456,86 @@ window.addEventListener("DOMContentLoaded", () => {
     modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Somente este Tipo será processado. Os demais permanecerão inalterados.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
   };
 
-  function commitCellEdit(td, row, column, previous) {
-    let value = td.textContent.trim();
+  function validateAndCommitRow(row, tr) {
+    const cells = [...tr.querySelectorAll("td[data-column]")];
+    const draft = {...row};
 
-    if (column === "Reclamante" && !value) {
-      td.textContent = previous;
-      return modal("Reclamante obrigatório", "<p>O campo <strong>Reclamante</strong> não pode ficar vazio.</p>");
+    for (const td of cells) {
+      const column = td.dataset.column;
+      let value = td.textContent.trim();
+
+      if (column === "Reclamante" && !value) {
+        modal("Reclamante obrigatório", "<p>O campo <strong>Reclamante</strong> não pode ficar vazio.</p>");
+        return false;
+      }
+
+      if (column === "Tipo") {
+        const group = typeToGroup(value);
+        if (!group) {
+          modal("Tipo inválido", `<p>O Tipo <strong>${esc(value || "(vazio)")}</strong> não é reconhecido. Use uma das classificações válidas do aplicativo.</p>`);
+          return false;
+        }
+      }
+
+      if (column === "Sorteado Para") {
+        const p = norm(value);
+        if (p && !p.includes("ANA") && !p.includes("FLAVIO")) {
+          modal("Sócio inválido", "<p>Em <strong>Sorteado Para</strong>, use <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
+          return false;
+        }
+      }
+
+      draft[column] = value;
     }
 
-    if (column === "Tipo") {
-      const group = typeToGroup(value);
-      if (!group) {
-        td.textContent = previous;
-        return modal("Tipo inválido", `<p>O Tipo <strong>${esc(value || "(vazio)")}</strong> não é reconhecido. Use uma das classificações válidas do aplicativo.</p>`);
-      }
-      row[column] = value;
-      buildGroups();
-      if (activeFilter) filtered = groupRows(activeFilter);
-    } else if (column === "Sorteado Para") {
-      const p = norm(value);
-      if (p && !p.includes("ANA") && !p.includes("FLAVIO")) {
-        td.textContent = previous;
-        return modal("Sócio inválido", "<p>Em <strong>Sorteado Para</strong>, use <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
-      }
-      row[column] = value;
-    } else if (column === "Valor da causa") {
-      row[column] = value;
+    Object.assign(row, draft);
+    buildGroups();
+
+    if (activeFilter) filtered = groupRows(activeFilter);
+    else if ($("searchInput").value.trim()) {
+      const text = norm($("searchInput").value);
+      filtered = master.filter(r => Object.entries(r).some(([key, value]) => !key.startsWith("__") && norm(value).includes(text)));
     } else {
-      row[column] = value;
+      filtered = [...master];
     }
 
     batchDone = master.length > 0 && master.every(r => partner(r));
     packageBtn.disabled = !batchDone;
-    td.classList.add("fsp-edited");
+    render(filtered);
     summaryUI(filtered);
+    return true;
+  }
 
-    if (column === "Tipo" && activeFilter) {
-      setTimeout(() => render(filtered), 0);
-    } else if (column === "Valor da causa") {
-      td.textContent = brl(row[column]);
+  function setRowEditing(tr, row, editing) {
+    const cells = [...tr.querySelectorAll("td[data-column]")];
+    const editBtn = tr.querySelector(".fsp-edit-row");
+    const deleteBtn = tr.querySelector(".fsp-delete-row");
+
+    cells.forEach(td => {
+      const column = td.dataset.column;
+      td.contentEditable = editing ? "true" : "false";
+      td.classList.toggle("fsp-editing", editing);
+      td.title = editing ? "Edite o conteúdo desta célula" : "";
+
+      if (editing && column === "Valor da causa") {
+        td.textContent = String(row[column] ?? "");
+      }
+    });
+
+    if (editing) {
+      tr.dataset.snapshot = JSON.stringify(Object.fromEntries(DEFAULT_COLS.map(col => [col, row[col] ?? ""])));
+      editBtn.textContent = "💾 Salvar";
+      editBtn.title = "Salvar alterações";
+      deleteBtn.textContent = "Cancelar";
+      deleteBtn.title = "Cancelar edição";
+      deleteBtn.classList.add("fsp-cancel-row");
+    } else {
+      editBtn.textContent = "✏️ Editar";
+      editBtn.title = "Editar esta linha";
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.title = "Excluir esta linha";
+      deleteBtn.classList.remove("fsp-cancel-row");
+      delete tr.dataset.snapshot;
     }
   }
 
@@ -517,6 +559,11 @@ window.addEventListener("DOMContentLoaded", () => {
       header.appendChild(th);
     });
 
+    const actionsHeader = document.createElement("th");
+    actionsHeader.textContent = "Ações";
+    actionsHeader.style.whiteSpace = "nowrap";
+    header.appendChild(actionsHeader);
+
     data.forEach((row, index) => {
       const tr = document.createElement("tr");
       const selectorCell = document.createElement("td");
@@ -529,36 +576,77 @@ window.addEventListener("DOMContentLoaded", () => {
 
       cols.forEach(column => {
         const td = document.createElement("td");
-        td.className = "fsp-editable";
-        td.contentEditable = "true";
+        td.dataset.column = column;
+        td.contentEditable = "false";
         td.spellcheck = false;
-        td.title = "Clique para editar";
         td.textContent = column === "Valor da causa" ? brl(row[column]) : (row[column] ?? "");
-
-        td.addEventListener("focus", () => {
-          td.dataset.previous = String(row[column] ?? "");
-          if (column === "Valor da causa") td.textContent = String(row[column] ?? "");
-        });
-
         td.addEventListener("keydown", event => {
-          if (event.key === "Enter") {
+          if (event.key === "Enter" && td.isContentEditable) {
             event.preventDefault();
             td.blur();
           }
-          if (event.key === "Escape") {
-            event.preventDefault();
-            td.textContent = td.dataset.previous ?? "";
-            td.blur();
-          }
         });
-
-        td.addEventListener("blur", () => {
-          const previous = td.dataset.previous ?? String(row[column] ?? "");
-          commitCellEdit(td, row, column, previous);
-        });
-
         tr.appendChild(td);
       });
+
+      const actions = document.createElement("td");
+      actions.className = "fsp-actions";
+      actions.style.whiteSpace = "nowrap";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn btn-neutral fsp-edit-row";
+      editBtn.textContent = "✏️ Editar";
+      editBtn.title = "Editar esta linha";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn btn-neutral fsp-delete-row";
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.title = "Excluir esta linha";
+
+      editBtn.onclick = () => {
+        const editing = editBtn.textContent.includes("Salvar");
+        if (!editing) {
+          setRowEditing(tr, row, true);
+          const firstCell = tr.querySelector("td[data-column]");
+          if (firstCell) firstCell.focus();
+          return;
+        }
+        validateAndCommitRow(row, tr);
+      };
+
+      deleteBtn.onclick = () => {
+        const cancelling = deleteBtn.classList.contains("fsp-cancel-row");
+        if (cancelling) {
+          const snapshot = JSON.parse(tr.dataset.snapshot || "{}");
+          Object.assign(row, snapshot);
+          render(filtered);
+          summaryUI(filtered);
+          return;
+        }
+
+        modal(
+          "Excluir processo",
+          `<p>Deseja realmente excluir da base o processo de <strong>${esc(row.Reclamante || "")}</strong>${row["Número de CNJ"] ? ` — ${esc(row["Número de CNJ"])}` : ""}?</p><p class="fsp-warn">A exclusão valerá para esta sessão e para a próxima base que você baixar.</p>`,
+          {
+            confirmText: "Excluir",
+            onConfirm: () => {
+              master = master.filter(item => item !== row);
+              filtered = filtered.filter(item => item !== row);
+              buildGroups();
+              batchDone = master.length > 0 && master.every(r => partner(r));
+              packageBtn.disabled = !batchDone;
+              render(filtered);
+              summaryUI(filtered);
+            }
+          }
+        );
+      };
+
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      tr.appendChild(actions);
       body.appendChild(tr);
     });
 
