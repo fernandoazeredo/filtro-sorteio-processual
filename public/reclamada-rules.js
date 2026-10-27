@@ -20,7 +20,22 @@
     });
     return [...groups.values()];
   }
-  function assign(rows, selected, valueOf, random = Math.random) {
+  function assign(rows, selected, valueOf, random) {
+    // A mesma base produz a mesma sequência pseudoaleatória em ambos os fluxos.
+    if (!random) {
+      let seed = 2166136261;
+      for (const row of selected) {
+        const token = [key(row.Reclamante), key(row['Número de CNJ']), key(row.Tipo), valueOf(row)].join('|');
+        for (let i=0;i<token.length;i++) seed = Math.imul(seed ^ token.charCodeAt(i), 16777619) >>> 0;
+      }
+      random = () => {
+        seed = (seed + 0x6D2B79F5) >>> 0;
+        let t = seed;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
     const all = units(rows); // Validate before mutating any assignment.
     const selection = new Set(selected);
     const touched = all.filter(g => g.rows.some(r => selection.has(r)));
