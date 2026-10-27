@@ -340,24 +340,28 @@ window.addEventListener("DOMContentLoaded", () => {
     return window.FSPReclamadaRules.assign(master, groupRows(group), row => parseBRL(row["Valor da causa"]));
   }
 
+  // Sorteio por filtro e sorteio em lote usam exatamente a mesma atribuição global.
+  function drawAll() {
+    const snapshot = master.map(row => row["Sorteado Para"]);
+    try {
+      master.forEach(row => { row["Sorteado Para"] = ""; });
+      window.FSPReclamadaRules.validate(master);
+      // Fixos primeiro: os grupos com reclamantes comuns ficam previamente reservados.
+      for (const group of FIXED_GROUPS) assignFixedGroup(group);
+      for (const group of RANDOM_GROUPS) assignRandom(group);
+      window.FSPReclamadaRules.validate(master);
+    } catch (error) {
+      master.forEach((row, index) => {row["Sorteado Para"] = snapshot[index];});
+      throw error;
+    }
+  }
+
   window.FSPDrawState = {
     completeForBatch(file) {
       if (file !== loadedFile || !master.length) {
         throw Error("Aguarde a planilha terminar de carregar antes de executar o lote.");
       }
-      const snapshot = master.map(row => row["Sorteado Para"]);
-      try {
-        // Lote começa novamente, sem carregar resultados antigos da sessão.
-        master.forEach(row => { row["Sorteado Para"] = ""; });
-        for (const group of ALL_GROUPS) {
-          if (RANDOM_GROUPS.includes(group)) assignRandom(group);
-          else assignFixedGroup(group);
-        }
-        window.FSPReclamadaRules.validate(master);
-      } catch (error) {
-        master.forEach((row,index) => {row["Sorteado Para"] = snapshot[index];});
-        throw error;
-      }
+      drawAll();
       batchDone = master.every(row => partner(row));
       packageBtn.disabled = !batchDone;
       render(filtered);
@@ -447,14 +451,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const rows = groupRows(activeFilter);
     if (!rows.length) return modal("Filtro sem processos", `<p>O filtro <strong>${labels[activeFilter]}</strong> não possui processos.</p>`);
 
-    const snapshot = master.map(row => row["Sorteado Para"]);
     let count;
     try {
-      clearGroupAssignments(activeFilter);
-      window.FSPReclamadaRules.validate(master);
-      count = RANDOM_GROUPS.includes(activeFilter) ? assignRandom(activeFilter) : assignFixedGroup(activeFilter);
+      drawAll();
+      count = rows.length;
     } catch (error) {
-      master.forEach((row, index) => row["Sorteado Para"] = snapshot[index]);
       return modal("Confira os reclamantes", `<p>${esc(error.message)}</p>`);
     }
     filtered = groupRows(activeFilter);
