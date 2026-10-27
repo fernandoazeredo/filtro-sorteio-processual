@@ -29,7 +29,7 @@
     const targetCount = Math.round(selected.length * .6), targetValue = total * .6;
     const pinned = touched.filter(g => g.owner === 'Flávio').flatMap(g => g.rows).filter(r => selection.has(r));
     const pinnedCount = pinned.length, pinnedValue = pinned.reduce((s,r) => s + Math.max(0,valueOf(r)),0);
-    const score = (n,v) => [Math.abs(n-targetCount), Math.abs(v-targetValue)];
+    const score = (n,v) => [Math.abs(v-targetValue), Math.abs(n-targetCount)];
     const better = (a,b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1] - 1e-7);
     let best = new Set(), bestScore = [Infinity,Infinity];
     for (let attempt=0; attempt<Math.min(1000,Math.max(50,candidates.length*8)); attempt++) {
@@ -41,10 +41,10 @@
       }
       const candidateScore=score(count,value);
       if (better(candidateScore,bestScore)) {best=chosen; bestScore=candidateScore;}
-      if(bestScore[0]===0 && (!total || bestScore[1]/total<=.0001))break;
+      if(bestScore[0] <= Math.max(0.01, total * .000001) && bestScore[1] === 0)break;
     }
-    // Refina o equilíbrio de valores sem piorar a diferença de quantidade.
-    // Trocas 1:1 entre grupos de mesma quantidade preservam a contagem.
+    // Otimiza primeiro o desvio financeiro; a contagem desempata resultados financeiros.
+    // Trocas entre grupos inteiros preservam os processos de cada reclamante.
     const current = () => {
       let n=pinnedCount,v=pinnedValue;
       for(const g of candidates) if(best.has(g.name)){n+=g.count;v+=g.value;}
