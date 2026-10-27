@@ -1156,6 +1156,29 @@ window.addEventListener("DOMContentLoaded", () => {
     summaryUI([]);
   }
 
-  $("clearBtn").onclick = reset;
+  const cancelDrawBtn = document.createElement("button");
+  cancelDrawBtn.id = "cancelDrawBtn";
+  cancelDrawBtn.type = "button";
+  cancelDrawBtn.className = "btn btn-laranja";
+  cancelDrawBtn.textContent = "CANCELAR SORTEIO";
+  cancelDrawBtn.title = "Remove apenas as atribuições da coluna Sorteado Para; preserva todos os processos";
+  $("drawBtn").insertAdjacentElement("afterend", cancelDrawBtn);
+  cancelDrawBtn.onclick = () => {
+    if (!master.length) return modal("Sem base carregada", "<p>Selecione uma planilha antes de cancelar o sorteio.</p>");
+    const assigned = master.filter(row => partner(row)).length;
+    if (!assigned) return modal("Sorteio não realizado", "<p>A coluna Sorteado Para já está vazia.</p>");
+    modal("Confirmar cancelamento do sorteio",
+      `<p>As atribuições de <strong>${assigned}</strong> processos serão apagadas da coluna <strong>Sorteado Para</strong>.</p><p>Os processos, valores, CNJs e demais informações serão preservados.</p><p class="fsp-warn"><strong>Antes de cancelar:</strong> exporte uma cópia da base atual se deseja guardar o resultado anterior.</p>`,
+      {confirmText: "Confirmar cancelamento", onConfirm: () => {
+        master.forEach(row => { row["Sorteado Para"] = ""; });
+        batchDone = false;
+        packageBtn.disabled = true;
+        filtered = activeFilter ? groupRows(activeFilter) : [...master];
+        render(filtered);
+        summaryUI(filtered);
+        modal("Sorteio cancelado", `<p class="fsp-ok">As atribuições de <strong>${assigned}</strong> processos foram removidas apenas da base carregada no navegador. Para obter o Excel sem atribuições, clique em <strong>BAIXAR BASE ATUALIZADA</strong>.</p>`);
+      }});
+  };
+    $("clearBtn").onclick = reset;
 });
 
