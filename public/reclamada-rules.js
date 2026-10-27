@@ -1,15 +1,18 @@
-/* Mesma reclamada permanece com um único sócio em toda a base. */
+/* Mesmo reclamante E mesma reclamada permanecem com um único sócio em toda a base. */
 ((root) => {
   'use strict';
   const key = value => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/\s+/g, ' ').trim();
   const fixed = row => ({COMPROMETIDO:'Flávio','ANA MULLER':'Ana','FLAVIO MARQUES':'Flávio','NADJA/ANA':'Ana','NADJA/FLAVIO':'Flávio'}[key(row.Tipo)] || '');
   const owner = row => key(row['Sorteado Para']).includes('FLAVIO') ? 'Flávio' : key(row['Sorteado Para']).includes('ANA') ? 'Ana' : '';
   function units(rows) {
-    const parents=rows.map((_,i)=>i), names=new Map(), cnjs=new Map();
+    const parents=rows.map((_,i)=>i), names=new Map(), claimants=new Map(), cnjs=new Map();
     const find=i=>{while(parents[i]!==i){parents[i]=parents[parents[i]];i=parents[i];}return i;};
     const join=(i,j)=>{parents[find(j)]=find(i);};
     rows.forEach((row,index)=>{
-      const name=key(row.Reclamada), cnj=String(row['Número de CNJ']??'').replace(/[^0-9]/g,'');
+      const name=key(row.Reclamada), claimant=key(row.Reclamante), cnj=String(row['Número de CNJ']??'').replace(/[^0-9]/g,'');
+      if (!claimant) throw Error(`Linha ${index+2} sem Reclamante. Informe o nome antes de sortear.`);
+      // Nome completo normalizado: variações de maiúsculas e acentos não dividem a carteira.
+      if(claimants.has(claimant))join(index,claimants.get(claimant));else claimants.set(claimant,index);
       if(!name && cnj.length!==20)throw Error(`Linha ${index+2} sem Reclamada e sem CNJ completo. Informe uma identificação antes de sortear.`);
       if(name){if(names.has(name))join(index,names.get(name));else names.set(name,index);}
       if(cnj.length===20){if(!cnjs.has(cnj))cnjs.set(cnj,[]);cnjs.get(cnj).push(index);}
@@ -26,7 +29,7 @@
       if (!groups.has(name)) groups.set(name, {name, rows:[], owner:''});
       const group = groups.get(name);
       for (const assigned of [fixed(row), owner(row)].filter(Boolean)) {
-        if (group.owner && group.owner !== assigned) throw Error(`A reclamada ${String(row.Reclamada)} possui sócios incompatíveis. Revise os Tipos fixos e as atribuições antes de sortear.`);
+        if (group.owner && group.owner !== assigned) throw Error(`Conflito no agrupamento do reclamante ${String(row.Reclamante)} / reclamada ${String(row.Reclamada)}: atribuições fixas ou anteriores apontam para sócios diferentes. Confira a base antes do sorteio.`);
         group.owner = assigned;
       }
       group.rows.push(row);
