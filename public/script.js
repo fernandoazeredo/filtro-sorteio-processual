@@ -227,11 +227,14 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function extractBase(workbook) {
     const preferred = workbook.SheetNames.find(name => norm(name) === "BASE PARA SORTEIO");
-    const sheetName = preferred || workbook.SheetNames[0];
+    const detailed = workbook.SheetNames.find(name => norm(name) === "TODOS OS PROCESSOS") || workbook.SheetNames.find(name => norm(name) === "ALEATORIO");
+    const sheetName = preferred || detailed || workbook.SheetNames[0];
     const rows = sheetRows(workbook, sheetName);
     if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
 
-    const cleaned = rows.map(onlyOperationalCols);
+    // Uma importação inicia um NOVO sorteio: jamais validar atribuições antigas do Excel.
+    // Mantenha todas as demais colunas, inclusive a classificação Tipo.
+    const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
     const first = cleaned[0];
     const missing = [];
     if (!String(first["Reclamante"] ?? "").trim()) missing.push("Reclamante");
