@@ -227,11 +227,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function extractBase(workbook) {
     const preferred = workbook.SheetNames.find(name => norm(name) === "BASE PARA SORTEIO");
-    const sheetName = preferred || workbook.SheetNames[0];
+    const detailed = workbook.SheetNames.find(name => norm(name) === "TODOS OS PROCESSOS") || workbook.SheetNames.find(name => norm(name) === "ALEATORIO") || workbook.SheetNames.find(name => norm(name).startsWith("ALEATORIO-"));
+    const sheetName = preferred || detailed || workbook.SheetNames[0];
     const rows = sheetRows(workbook, sheetName);
     if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
 
-    const cleaned = rows.map(onlyOperationalCols);
+    // Novo sorteio: ignorar sorteios anteriores inclusive quando Excel importado tem atribuições.
+    const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
     const first = cleaned[0];
     const missing = [];
     if (!String(first["Reclamante"] ?? "").trim()) missing.push("Reclamante");
@@ -343,11 +345,19 @@ window.addEventListener("DOMContentLoaded", () => {
       if (file !== loadedFile || !master.length) {
         throw Error("Aguarde a planilha terminar de carregar antes de executar o lote.");
       }
-      for (const group of ALL_GROUPS) {
-        if (RANDOM_GROUPS.includes(group)) assignRandom(group);
-        else assignFixedGroup(group);
+      const snapshot = master.map(row => row["Sorteado Para"]);
+      try {
+        // Lote começa novamente, sem carregar resultados antigos da sessão.
+        master.forEach(row => { row["Sorteado Para"] = ""; });
+        for (const group of ALL_GROUPS) {
+          if (RANDOM_GROUPS.includes(group)) assignRandom(group);
+          else assignFixedGroup(group);
+        }
+        window.FSPReclamadaRules.validate(master);
+      } catch (error) {
+        master.forEach((row,index) => {row["Sorteado Para"] = snapshot[index];});
+        throw error;
       }
-      window.FSPReclamadaRules.validate(master);
       batchDone = master.every(row => partner(row));
       packageBtn.disabled = !batchDone;
       render(filtered);
@@ -440,8 +450,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const snapshot = master.map(row => row["Sorteado Para"]);
     let count;
     try {
-      window.FSPReclamadaRules.validate(master);
       clearGroupAssignments(activeFilter);
+      window.FSPReclamadaRules.validate(master);
       count = RANDOM_GROUPS.includes(activeFilter) ? assignRandom(activeFilter) : assignFixedGroup(activeFilter);
     } catch (error) {
       master.forEach((row, index) => row["Sorteado Para"] = snapshot[index]);
