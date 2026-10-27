@@ -1,35 +1,19 @@
-/* Mesmo reclamante E mesma reclamada permanecem com um único sócio em toda a base. */
+/* Somente o reclamante identifica o grupo indivisível; reclamada não agrupa processos. */
 ((root) => {
   'use strict';
   const key = value => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/\s+/g, ' ').trim();
   const fixed = row => ({COMPROMETIDO:'Flávio','ANA MULLER':'Ana','FLAVIO MARQUES':'Flávio','NADJA/ANA':'Ana','NADJA/FLAVIO':'Flávio'}[key(row.Tipo)] || '');
   const owner = row => key(row['Sorteado Para']).includes('FLAVIO') ? 'Flávio' : key(row['Sorteado Para']).includes('ANA') ? 'Ana' : '';
   function units(rows) {
-    const parents=rows.map((_,i)=>i), names=new Map(), claimants=new Map(), cnjs=new Map();
-    const find=i=>{while(parents[i]!==i){parents[i]=parents[parents[i]];i=parents[i];}return i;};
-    const join=(i,j)=>{parents[find(j)]=find(i);};
-    rows.forEach((row,index)=>{
-      const name=key(row.Reclamada), claimant=key(row.Reclamante), cnj=String(row['Número de CNJ']??'').replace(/[^0-9]/g,'');
-      if (!claimant) throw Error(`Linha ${index+2} sem Reclamante. Informe o nome antes de sortear.`);
-      // Nome completo normalizado: variações de maiúsculas e acentos não dividem a carteira.
-      if(claimants.has(claimant))join(index,claimants.get(claimant));else claimants.set(claimant,index);
-      if(!name && cnj.length!==20)throw Error(`Linha ${index+2} sem Reclamada e sem CNJ completo. Informe uma identificação antes de sortear.`);
-      if(name){if(names.has(name))join(index,names.get(name));else names.set(name,index);}
-      if(cnj.length===20){if(!cnjs.has(cnj))cnjs.set(cnj,[]);cnjs.get(cnj).push(index);}
-    });
-    for(const indices of cnjs.values()) {
-      if(!indices.some(i=>!key(rows[i].Reclamada)))continue;
-      const known=new Set(indices.map(i=>key(rows[i].Reclamada)).filter(Boolean));
-      if(known.size>1)throw Error('CNJ associado a reclamadas diferentes: confira a linha sem Reclamada antes de sortear.');
-      for(const i of indices)join(indices[0],i);
-    }
     const groups = new Map();
     rows.forEach((row, index) => {
-      const name = find(index);
-      if (!groups.has(name)) groups.set(name, {name, rows:[], owner:''});
-      const group = groups.get(name);
+      const claimant = key(row.Reclamante);
+      if (!claimant) throw Error(`Linha ${index+2} sem Reclamante.`);
+      if (!groups.has(claimant)) groups.set(claimant, {name: claimant, rows:[], owner:''});
+      const group = groups.get(claimant);
       for (const assigned of [fixed(row), owner(row)].filter(Boolean)) {
-        if (group.owner && group.owner !== assigned) throw Error(`Conflito no agrupamento do reclamante ${String(row.Reclamante)} / reclamada ${String(row.Reclamada)}: atribuições fixas ou anteriores apontam para sócios diferentes. Confira a base antes do sorteio.`);
+        if (group.owner && group.owner !== assigned)
+          throw Error(`O reclamante ${row.Reclamante} possui atribuições incompatíveis. Confira Tipos fixos e a coluna Sorteado Para.`);
         group.owner = assigned;
       }
       group.rows.push(row);
@@ -58,6 +42,27 @@
       const candidateScore=score(count,value);
       if (better(candidateScore,bestScore)) {best=chosen; bestScore=candidateScore;}
       if(bestScore[0]===0 && (!total || bestScore[1]/total<=.0001))break;
+    }
+    // Refina o equilíbrio de valores sem piorar a diferença de quantidade.
+    // Trocas 1:1 entre grupos de mesma quantidade preservam a contagem.
+    const current = () => {
+      let n=pinnedCount,v=pinnedValue;
+      for(const g of candidates) if(best.has(g.name)){n+=g.count;v+=g.value;}
+      return {n,v};
+    };
+    for(let pass=0;pass<12;pass++){
+      const base=current();
+      let bestMove=null, bestCandidateScore=score(base.n,base.v);
+      const left=candidates.filter(g=>best.has(g.name));
+      const right=candidates.filter(g=>!best.has(g.name));
+      for(const from of left) for(const to of right){
+        const candidateScore=score(base.n-from.count+to.count,base.v-from.value+to.value);
+        if(better(candidateScore,bestCandidateScore)){
+          bestCandidateScore=candidateScore;bestMove={from,to};
+        }
+      }
+      if(!bestMove) break;
+      best.delete(bestMove.from.name);best.add(bestMove.to.name);
     }
     for (const g of touched) {
       const assigned=g.owner || (best.has(g.name)?'Flávio':'Ana');
