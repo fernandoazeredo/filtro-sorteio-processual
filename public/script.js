@@ -407,11 +407,11 @@ window.addEventListener("DOMContentLoaded", () => {
     for (const group of ALL_GROUPS) {
       const data = groupRows(group);
       const isRandom = RANDOM_GROUPS.includes(group);
-      const rule = isRandom ? "Meta 60/40, reclamada indivisível" : (["ANA", "NADJA"].includes(group) ? "100% Ana" : "100% Flávio");
+      const rule = isRandom ? "Meta 60/40, reclamante indivisível" : (["ANA", "NADJA"].includes(group) ? "100% Ana" : "100% Flávio");
       const q = isRandom ? quota(data) : null;
       rows += `<tr><td>${labels[group]}</td><td>${data.length}</td><td>${rule}</td><td>${q ? `${q.flavio} Flávio / ${q.ana} Ana` : rule}</td></tr>`;
     }
-    return `<table><thead><tr><th>Tipo</th><th>Qtd.</th><th>Regra</th><th>Meta de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">O Tipo classifica os processos. Cada reclamada fica com um único sócio, inclusive entre Tipos diferentes; os grupos indivisíveis podem alterar os percentuais finais.</p>`;
+    return `<table><thead><tr><th>Tipo</th><th>Qtd.</th><th>Regra</th><th>Meta de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">O Tipo classifica os processos. Cada reclamante fica com um único sócio, inclusive entre Tipos diferentes; os grupos indivisíveis podem alterar os percentuais finais.</p>`;
   }
 
   previewBtn.onclick = () => modal("Conferência dos grupos", previewHtml());
@@ -445,7 +445,7 @@ window.addEventListener("DOMContentLoaded", () => {
       count = RANDOM_GROUPS.includes(activeFilter) ? assignRandom(activeFilter) : assignFixedGroup(activeFilter);
     } catch (error) {
       master.forEach((row, index) => row["Sorteado Para"] = snapshot[index]);
-      return modal("Confira as reclamadas", `<p>${esc(error.message)}</p>`);
+      return modal("Confira os reclamantes", `<p>${esc(error.message)}</p>`);
     }
     filtered = groupRows(activeFilter);
     render(filtered);
@@ -464,8 +464,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const data = groupRows(activeFilter);
     const isRandom = RANDOM_GROUPS.includes(activeFilter);
     const q = isRandom ? quota(data) : null;
-    const rule = isRandom ? "Meta de 60% Flávio / 40% Ana em quantidade e valor, mantendo cada reclamada inteira com um único sócio" : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio");
-    modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>As mesmas reclamadas em outros Tipos receberão o mesmo sócio. Grupos grandes podem afastar o resultado de 60% / 40%.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
+    const rule = isRandom ? "Meta de 60% Flávio / 40% Ana em quantidade e valor, mantendo os processos de cada reclamante com um único sócio" : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio");
+    modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Os mesmos reclamantes em outros Tipos receberão o mesmo sócio. Grupos grandes podem afastar o resultado de 60% / 40%.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
   };
 
   function validateAndCommitRow(row, tr) {
@@ -503,7 +503,7 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       window.FSPReclamadaRules.validate(master.map(item => item === row ? draft : item));
     } catch (error) {
-      modal("Confira a reclamada e o sócio", `<p>${esc(error.message)}</p>`);
+      modal("Confira o reclamante e o sócio", `<p>${esc(error.message)}</p>`);
       return false;
     }
     Object.assign(row, draft);
