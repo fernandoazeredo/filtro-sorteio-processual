@@ -2,7 +2,14 @@
 ((root) => {
   'use strict';
   const key = value => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/\s+/g, ' ').trim();
-  const fixed = row => ({COMPROMETIDO:'Flávio','ANA MULLER':'Ana','FLAVIO MARQUES':'Flávio','NADJA/ANA':'Ana','NADJA/FLAVIO':'Flávio'}[key(row.Tipo)] || '');
+  const socioOwner = row => {
+    const value = key(row['Sócio a gerir']);
+    if (!value) return '';
+    if (value === 'ANA') return 'Ana';
+    if (value === 'FLAVIO') return 'Flávio';
+    throw Error(`Sócio a gerir inválido para ${row.Reclamante || 'registro sem reclamante'}: use somente Ana, Flávio ou deixe em branco.`);
+  };
+  const fixed = row => socioOwner(row) || ({COMPROMETIDO:'Flávio','ANA MULLER':'Ana','FLAVIO MARQUES':'Flávio','NADJA/ANA':'Ana','NADJA/FLAVIO':'Flávio'}[key(row.Tipo)] || '');
   const owner = row => key(row['Sorteado Para']).includes('FLAVIO') ? 'Flávio' : key(row['Sorteado Para']).includes('ANA') ? 'Ana' : '';
   function units(rows) {
     const groups = new Map();
@@ -37,11 +44,20 @@
       };
     }
     const all = units(rows); // Validate before mutating any assignment.
-    const selection = new Set(selected);
+    const canonical = [];
+    const seenCnj = new Set();
+    selected.forEach((row, index) => {
+      const cnj = key(row['Número de CNJ']);
+      if (!cnj) { canonical.push(row); return; }
+      if (seenCnj.has(cnj)) return;
+      seenCnj.add(cnj);
+      canonical.push(row);
+    });
+    const selection = new Set(canonical);
     const touched = all.filter(g => g.rows.some(r => selection.has(r)));
     const candidates = touched.filter(g => !g.owner).map(g => ({...g, count:g.rows.filter(r => selection.has(r)).length, value:g.rows.filter(r => selection.has(r)).reduce((s,r) => s + Math.max(0,valueOf(r)),0)}));
-    const total = selected.reduce((s,r) => s + Math.max(0,valueOf(r)),0);
-    const targetCount = Math.round(selected.length * .6), targetValue = total * .6;
+    const total = canonical.reduce((s,r) => s + Math.max(0,valueOf(r)),0);
+    const targetCount = Math.round(canonical.length * .6), targetValue = total * .6;
     const pinned = touched.filter(g => g.owner === 'Flávio').flatMap(g => g.rows).filter(r => selection.has(r));
     const pinnedCount = pinned.length, pinnedValue = pinned.reduce((s,r) => s + Math.max(0,valueOf(r)),0);
     const score = (n,v) => [Math.abs(v-targetValue), Math.abs(n-targetCount)];
@@ -95,7 +111,7 @@
       const assigned=g.owner || (best.has(g.name)?'Flávio':'Ana');
       g.rows.forEach(r => r['Sorteado Para']=assigned);
     }
-    return selected.length;
+    return canonical.length;
   }
   root.FSPReclamadaRules = Object.freeze({key, validate:rows=>units(rows), assign});
 })(typeof window === 'undefined' ? globalThis : window);
