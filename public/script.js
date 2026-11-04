@@ -163,20 +163,39 @@ window.addEventListener("DOMContentLoaded", () => {
     #tableBody .fsp-actions .btn{padding:6px 9px;font-size:12px}
     #tableBody .fsp-cancel-row{min-width:70px}
     #tableBody .fsp-cell-input{display:block;width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:4px;border:1px solid #2563eb;border-radius:4px;background:var(--surface);color:inherit}
-.tabela-area{max-height:calc(100vh - 120px);overflow:auto}
+.tabela-area{max-height:calc(100vh - 120px);overflow:auto;margin-bottom:10px}
+    body{padding:6px}
+    .container{max-width:none;padding:8px 10px;position:relative}
+    .container h1{font-size:19px;margin-bottom:6px}
+    .controls{gap:5px;margin-bottom:6px}
+    .controls .btn,#fspPager .btn{min-height:28px;padding:4px 9px;font-size:12.5px}
+    .controls .file-label{display:inline-flex;align-items:center;min-height:28px;height:28px;padding:4px 9px;font-size:12.5px}
+    .controls .file-label span{padding:0;min-height:0;font-size:12.5px}
+    .controls .input-text{min-height:28px;padding:3px 8px;font-size:13px}
+    #fspPager{margin:0 0 6px;font-size:13px}
+    #fspPager select{min-height:28px;padding:2px 6px;font-size:13px}
+    #mainTable th,#mainTable td{padding:4px 6px;font-size:12.5px;line-height:1.25}
+    #tableBody .fsp-actions .btn{min-height:24px;padding:2px 6px;font-size:11.5px}
+    @media(min-width:800px){.app-toolbar{position:absolute;top:6px;right:10px;margin:0;z-index:3}.app-toolbar button{padding:3px 8px;font-size:12.5px}}
     #mainTable thead th{position:sticky;top:0;z-index:2}
-    #mainTable{table-layout:fixed;width:max(100%,2240px)}
+    #mainTable{table-layout:fixed;width:max(100%,1530px)}
     #mainTable th,#mainTable td{overflow-wrap:anywhere;vertical-align:top}
-    #mainTable th:nth-child(1){width:44px}
-    #mainTable th[data-column="Reclamante"],#mainTable th[data-column="Reclamada"]{width:280px}
-    #mainTable th[data-column="Sorteado Para"]{width:130px}
-    #mainTable th[data-column="Número de CNJ"]{width:220px}
-    #mainTable th[data-column="Valor da causa"]{width:140px}
-    #mainTable th[data-column="Última Decisão"]{width:240px}
+    #mainTable th:nth-child(1){width:30px}
+    #mainTable th[data-column="Reclamante"],#mainTable th[data-column="Reclamada"]{width:190px}
+    #mainTable th[data-column="Sorteado Para"]{width:78px}
+    #mainTable th[data-column="Número de CNJ"]{width:190px}
+    #mainTable td[data-column="Número de CNJ"]{white-space:nowrap}
+    #mainTable th[data-column="Valor da causa"]{width:100px}
+    #mainTable th[data-column="Última Decisão"]{width:140px}
+    #mainTable th[data-column="Sócio a gerir"]{width:70px}
+    #mainTable th[data-column="Status Antigo - Execução (REINALDO)"]{width:90px}
+    #mainTable th[data-column="Status Antigo - Demais (SORTEIO ANTIGO)"]{width:120px}
+    #mainTable th[data-column="Tipo"]{width:70px}
+    #mainTable th[data-column="Aba de origem"]{width:110px}
     #mainTable th[data-column="Sorteado Para"]{background:#f59e0b;color:#1f2937}
     #mainTable td[data-column="Sorteado Para"]{background:#fef3c7;color:#1f2937;font-weight:700}
     :root[data-theme="dark"] #mainTable td[data-column="Sorteado Para"]{background:#78350f;color:#fef3c7}
-    #mainTable th:last-child{width:190px}
+    #mainTable th:last-child{width:150px}
   `;
   document.head.appendChild(editStyle);
   $("drawBtn").textContent = "Executar Sorteio";
@@ -503,6 +522,14 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // A tabela ocupa toda a altura disponível da janela.
+  function fitTableArea() {
+    const area = document.querySelector(".tabela-area");
+    const top = area.getBoundingClientRect().top + window.scrollY;
+    area.style.maxHeight = `${Math.max(260, window.innerHeight - top - 8)}px`;
+  }
+  window.addEventListener("resize", fitTableArea);
+
   function syncSelectAll(box, data) {
     box.checked = data.length > 0 && data.every(row => selectedRows.has(row));
   }
@@ -574,6 +601,7 @@ window.addEventListener("DOMContentLoaded", () => {
     body.innerHTML = "";
     const pageRows = currentPageRows(data);
     updatePager(data);
+    fitTableArea();
     if (!data.length) return;
 
     const chosen = selected.filter(column => available.includes(column));
