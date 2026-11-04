@@ -6,29 +6,8 @@ window.addEventListener("DOMContentLoaded", () => {
     "Status Antigo - Demais (SORTEIO ANTIGO)", "Tipo"
   ];
   const DEFAULT_COLS = [...SOURCE_COLS, "Sorteado Para", "Aba de origem"];
-  const REPORT_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão", "Sorteado Para"];
-  const REQUIRED = ["Reclamante", "Tipo"];
-
-  const RANDOM_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "ED", "EF", "EP"];
-  const FIXED_GROUPS = ["COMPROMETIDO", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO"];
-  const ALL_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "COMPROMETIDO", "ED", "EF", "EP", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO", "PENDENTE"];
-  const RANDOM_ATTEMPTS = 4000;
-  const RANDOM_SWAP_PASSES = 20;
-  const RANDOM_EARLY_TOLERANCE = 0.0001;
-
-  const labels = {
-    ALEATORIO: "ALEATÓRIO",
-    IMPROCEDENTE: "IMPROCEDENTE",
-    COMPROMETIDO: "Comprometido/Flavio",
-    ED: "ED",
-    EF: "EF",
-    EP: "EP",
-    ANA: "ANA MULLER",
-    FLAVIO: "FLÁVIO MARQUES",
-    NADJA: "NADJA/ANA",
-    "NADJA/FLAVIO": "NADJA/FLÁVIO",
-    PENDENTE: "PENDENTE DE CLASSIFICAÇÃO"
-  };
+  const REPORT_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Valor da causa", "Última Decisão", "Sorteado Para"];
+  const REQUIRED = ["Reclamante"];
 
   let loadedFile = null;
   let master = [];
@@ -37,7 +16,6 @@ window.addEventListener("DOMContentLoaded", () => {
   let selected = [...DEFAULT_COLS];
   let activeFilter = "";
   let batchDone = false;
-  let groupMap = new Map();
 
   const $ = id => document.getElementById(id);
   const norm = value => String(value ?? "")
@@ -181,33 +159,20 @@ window.addEventListener("DOMContentLoaded", () => {
     #tableBody .fsp-actions{display:flex;gap:6px;align-items:center}
     #tableBody .fsp-actions .btn{padding:6px 9px;font-size:12px}
     #tableBody .fsp-cancel-row{min-width:70px}
+    #tableBody .fsp-cell-input{display:block;width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:4px;border:1px solid #2563eb;border-radius:4px;background:var(--surface);color:inherit}
+.tabela-area{max-height:calc(100vh - 120px);overflow:auto}
+    #mainTable thead th{position:sticky;top:0;z-index:2}
+    #mainTable{table-layout:fixed;width:max(100%,2240px)}
+    #mainTable th,#mainTable td{overflow-wrap:anywhere;vertical-align:top}
+    #mainTable th:nth-child(1){width:44px}
+    #mainTable th:nth-child(2),#mainTable th:nth-child(3){width:280px}
+    #mainTable th:nth-child(4){width:220px}
+    #mainTable th:nth-child(5){width:140px}
+    #mainTable th:nth-child(6){width:240px}
+    #mainTable th:last-child{width:190px}
   `;
   document.head.appendChild(editStyle);
-  $("drawBtn").textContent = "Executar Sorteio por filtro";
-  if ($("filterInput") && ![...$("filterInput").options].some(option => option.value === "PENDENTE")) {
-    const pendingOption = document.createElement("option");
-    pendingOption.value = "PENDENTE";
-    pendingOption.textContent = "PENDENTE DE CLASSIFICAÇÃO";
-    $("filterInput").appendChild(pendingOption);
-  }
-
-  function typeToGroup(value) {
-    const type = norm(value);
-    const map = {
-      "ALEATORIO": "ALEATORIO",
-      "IMPROCEDENTE": "IMPROCEDENTE",
-      "COMPROMETIDO": "COMPROMETIDO",
-      "ED": "ED",
-      "EF": "EF",
-      "EP": "EP",
-      "ANA MULLER": "ANA",
-      "FLAVIO MARQUES": "FLAVIO",
-      "NADJA/ANA": "NADJA",
-      "NADJA/FLAVIO": "NADJA/FLAVIO",
-      "PENDENTE": "PENDENTE"
-    };
-    return map[type] || "";
-  }
+  $("drawBtn").textContent = "Executar Sorteio";
 
   function sourceField(row, aliases) {
     const entries = Object.entries(row || {});
@@ -238,7 +203,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "Status Antigo - Demais (SORTEIO ANTIGO)", "Status Antigo Demais", "Status Antigo"
     ]);
     const directType = sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]);
-    const tipo = typeToGroup(directType) ? directType : "PENDENTE";
+    const tipo = directType;
 
     return {
       "Reclamante": sourceField(row, ["Reclamante", "Cliente", "Nome do Reclamante"]),
@@ -260,17 +225,15 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!sheet) return [];
     const headerIndex = headerRowIndex(sheet);
     if (headerIndex < 0) return [];
-    return XLSX.utils.sheet_to_json(sheet, {defval: "", raw: true, range: headerIndex})
-      .map(row => normalizeSourceRow(row, sheetName))
-      .filter(row => {
-        const claimant = String(row["Reclamante"] ?? "").trim();
-        const claimantKey = norm(claimant);
-        const hasIdentity = String(row["Reclamada"] ?? "").trim() || String(row["Número de CNJ"] ?? "").trim();
-        const summaryLabels = new Set(["QUADRO RESUMO", "SOCIO", "FLAVIO", "ANA", "SEM SOCIO DEFINIDO", "TOTAL"]);
-        if (!claimant) return false;
-        if (summaryLabels.has(claimantKey) && !hasIdentity) return false;
-        return true;
-      });
+    const rows = [];
+    for (const raw of XLSX.utils.sheet_to_json(sheet, {defval: "", raw: true, range: headerIndex})) {
+      const row = normalizeSourceRow(raw, sheetName);
+      const claimant = String(row["Reclamante"] ?? "").trim();
+      // O quadro de resumo fica no fim da aba e não contém processos.
+      if (norm(claimant) === "QUADRO RESUMO") break;
+      if (claimant) rows.push(row);
+    }
+    return rows;
   }
 
   function onlyOperationalCols(row) {
@@ -315,121 +278,52 @@ window.addEventListener("DOMContentLoaded", () => {
 
     // Novo sorteio: preserva os status e o Sócio a gerir da origem, mas limpa a nova atribuição.
     const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
-    const pending = cleaned.filter(row => typeToGroup(row.Tipo) === "PENDENTE").length;
-
-    window.FSPReclamadaRules.validate(cleaned);
     return {
       rows: cleaned,
-      sheetName: usedSheets.length === 1 ? usedSheets[0] : `${usedSheets.length} abas operacionais`,
-      pending
+      sheetName: usedSheets.length === 1 ? usedSheets[0] : `${usedSheets.length} abas operacionais`
     };
   }
 
   function buildGroups() {
-    groupMap = new Map(ALL_GROUPS.map(group => [group, []]));
-    for (const row of master) {
-      const group = typeToGroup(row.Tipo);
-      row.__group = group;
-      groupMap.get(group).push(row);
+    master.forEach(row => { row.__group = "TODOS"; });
+  }
+
+  const wordMatcher = term => {
+    const text = norm(term);
+    if (!text) return null;
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^A-Z0-9])${escaped}($|[^A-Z0-9])`);
+  };
+
+  function currentRows() {
+    const matcher = wordMatcher(activeFilter);
+    if (!matcher) return [...master];
+    return master.filter(row => DEFAULT_COLS.some(column => matcher.test(norm(row[column]))));
+  }
+
+  const causeValue = row => parseBRL(row["Valor da causa"]);
+
+  // A regra de atribuição é a de reclamada-rules.js. A ordem da tela não influencia o resultado.
+  function drawRows(rows) {
+    const chosen = new Set(rows);
+    const selection = master.filter(row => chosen.has(row));
+    const snapshot = master.map(row => row["Sorteado Para"]);
+    try {
+      window.FSPReclamadaRules.assign(master, selection, causeValue);
+      window.FSPReclamadaRules.validate(master);
+    } catch (error) {
+      master.forEach((row, index) => { row["Sorteado Para"] = snapshot[index]; });
+      throw error;
     }
   }
 
-  const groupRows = group => groupMap.get(group) || [];
-  const clearGroupAssignments = group => groupRows(group).forEach(row => row["Sorteado Para"] = "");
-
-  function assignFixedGroup(group) {
-    return window.FSPReclamadaRules.assign(master, groupRows(group), row => parseBRL(row["Valor da causa"]));
-  }
-
-  function quota(rows) {
-    const total = uniqueForRateio(rows).length;
-    const flavio = Math.round(total * 0.60);
-    return {flavio, ana: total - flavio};
-  }
-
-  function shuffled(rows) {
-    const copy = [...rows];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  }
-
-  function bestRandomAllocation(rows) {
-    const q = quota(rows);
-    const totalValue = rows.reduce((sum, row) => sum + Math.max(0, parseBRL(row["Valor da causa"])), 0);
-    const target = totalValue * 0.60;
-    let bestFlavio = null;
-    let bestValue = 0;
-    let bestError = Infinity;
-
-    for (let attempt = 0; attempt < RANDOM_ATTEMPTS; attempt++) {
-      const order = shuffled(rows);
-      const flavio = order.slice(0, q.flavio);
-      const fv = flavio.reduce((sum, row) => sum + Math.max(0, parseBRL(row["Valor da causa"])), 0);
-      const error = Math.abs(fv - target);
-      if (error < bestError) {
-        bestError = error;
-        bestValue = fv;
-        bestFlavio = new Set(flavio);
-      }
-      if (totalValue > 0 && bestError / totalValue <= RANDOM_EARLY_TOLERANCE) break;
-    }
-
-    if (!bestFlavio) bestFlavio = new Set(shuffled(rows).slice(0, q.flavio));
-    if (!totalValue) return bestFlavio;
-
-    for (let pass = 0; pass < RANDOM_SWAP_PASSES; pass++) {
-      const flavioRows = rows.filter(row => bestFlavio.has(row));
-      const anaRows = rows.filter(row => !bestFlavio.has(row));
-      const currentError = Math.abs(bestValue - target);
-      let bestSwap = null;
-      let nextError = currentError;
-
-      for (const fr of flavioRows) {
-        const fval = Math.max(0, parseBRL(fr["Valor da causa"]));
-        for (const ar of anaRows) {
-          const aval = Math.max(0, parseBRL(ar["Valor da causa"]));
-          const candidateValue = bestValue - fval + aval;
-          const candidateError = Math.abs(candidateValue - target);
-          if (candidateError + 1e-9 < nextError) {
-            nextError = candidateError;
-            bestSwap = {fr, ar, candidateValue};
-          }
-        }
-      }
-
-      if (!bestSwap) break;
-      bestFlavio.delete(bestSwap.fr);
-      bestFlavio.add(bestSwap.ar);
-      bestValue = bestSwap.candidateValue;
-      if (nextError / totalValue <= RANDOM_EARLY_TOLERANCE) break;
-    }
-
-    return bestFlavio;
-  }
-
-  function assignRandom(group) {
-    return window.FSPReclamadaRules.assign(master, groupRows(group), row => parseBRL(row["Valor da causa"]));
-  }
-
-  // Sorteio por filtro e sorteio em lote usam exatamente a mesma atribuição global.
   function drawAll() {
-    const unresolved = master.filter(row => typeToGroup(row.Tipo) === "PENDENTE");
-    if (unresolved.length) {
-      throw Error(`${unresolved.length} processo(s) estão com Tipo PENDENTE. Use o filtro PENDENTE DE CLASSIFICAÇÃO, edite os registros e defina o Tipo antes do sorteio.`);
-    }
     const snapshot = master.map(row => row["Sorteado Para"]);
     try {
       master.forEach(row => { row["Sorteado Para"] = ""; });
-      window.FSPReclamadaRules.validate(master);
-      // Fixos primeiro: os grupos com reclamantes comuns ficam previamente reservados.
-      for (const group of FIXED_GROUPS) assignFixedGroup(group);
-      for (const group of RANDOM_GROUPS) assignRandom(group);
-      window.FSPReclamadaRules.validate(master);
+      drawRows(master);
     } catch (error) {
-      master.forEach((row, index) => {row["Sorteado Para"] = snapshot[index];});
+      master.forEach((row, index) => { row["Sorteado Para"] = snapshot[index]; });
       throw error;
     }
   }
@@ -474,7 +368,7 @@ window.addEventListener("DOMContentLoaded", () => {
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
-        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo reconhece a nova estrutura com <strong>Sócio a gerir</strong> e os dois campos de <strong>Status Antigo</strong>, mantendo esses dados editáveis. Os campos de Status Antigo são apenas históricos; a classificação do sorteio usa a coluna <strong>Tipo</strong>. Quando o Tipo não for válido, o registro fica <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. <strong>Sorteado Para</strong> é zerada para o novo sorteio.</p>${result.pending ? `<p class="fsp-warn"><strong>${result.pending}</strong> registro(s) ficaram como <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. Eles podem ser filtrados e corrigidos diretamente no aplicativo antes do sorteio.</p>` : ""}`);
+        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">Busque qualquer nome, edite o que precisar e sorteie as linhas encontradas. <strong>Sócio a gerir</strong> preenchido permanece; o restante é sorteado.</p>`);
       } catch (error) {
         modal("Erro ao ler planilha", `<p>${error.message}</p>`);
         reset();
@@ -495,34 +389,16 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   function previewHtml() {
-    let rows = "";
-    for (const group of ALL_GROUPS) {
-      const data = groupRows(group);
-      const isRandom = RANDOM_GROUPS.includes(group);
-      const isPending = group === "PENDENTE";
-      const rule = isPending ? "Corrigir antes do sorteio" : (isRandom ? "Meta 60/40, reclamante indivisível" : (["ANA", "NADJA"].includes(group) ? "100% Ana" : "100% Flávio"));
-      const q = isRandom ? quota(data) : null;
-      rows += `<tr><td>${labels[group]}</td><td>${data.length}</td><td>${rule}</td><td>${q ? `${q.flavio} Flávio / ${q.ana} Ana` : rule}</td></tr>`;
-    }
-    return `<table><thead><tr><th>Tipo</th><th>Qtd.</th><th>Regra</th><th>Meta de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">O Tipo classifica os processos. Cada reclamante fica com um único sócio. CNJs repetidos permanecem visíveis para auditoria, mas contam uma única vez no rateio de quantidade e valor.</p>`;
+    const count = name => master.filter(row => norm(row["Sócio a gerir"]) === name).length;
+    const ana = count("ANA"), flavio = count("FLAVIO");
+    return `<table><thead><tr><th>Situação</th><th>Qtd.</th></tr></thead><tbody><tr><td>Sócio a gerir: Flávio</td><td>${flavio}</td></tr><tr><td>Sócio a gerir: Ana</td><td>${ana}</td></tr><tr><td>A sortear</td><td>${master.length - ana - flavio}</td></tr></tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">Cada reclamante fica com um único sócio.</p>`;
   }
 
   previewBtn.onclick = () => modal("Conferência dos grupos", previewHtml());
 
-  function uniqueForRateio(data) {
-    const seen = new Set();
-    return data.filter((row, index) => {
-      const cnj = norm(row["Número de CNJ"]);
-      if (!cnj) return true;
-      if (seen.has(cnj)) return false;
-      seen.add(cnj);
-      return true;
-    });
-  }
-
   function sum(data) {
     let ac = 0, av = 0, fc = 0, fv = 0;
-    uniqueForRateio(data).forEach(row => {
+    data.forEach(row => {
       const p = partner(row);
       const value = parseBRL(row["Valor da causa"]);
       if (p === "Ana") { ac++; av += value; }
@@ -531,105 +407,43 @@ window.addEventListener("DOMContentLoaded", () => {
     return {ac, av, fc, fv, tc: ac + fc, tv: av + fv};
   }
 
-  function resultForGroup(group) {
-    const s = sum(groupRows(group));
-    return `<table><thead><tr><th>Tipo</th><th>Qtd Flávio</th><th>% Qtd F.</th><th>Qtd Ana</th><th>% Qtd A.</th><th>% Valor F.</th><th>% Valor A.</th></tr></thead><tbody><tr><td>${labels[group]}</td><td>${s.fc}</td><td>${pct(s.fc, s.tc)}</td><td>${s.ac}</td><td>${pct(s.ac, s.tc)}</td><td>${pct(s.fv, s.tv)}</td><td>${pct(s.av, s.tv)}</td></tr></tbody></table>`;
+  function resultFor(rows, label) {
+    const s = sum(rows);
+    return `<table><thead><tr><th>Seleção</th><th>Qtd Flávio</th><th>% Qtd F.</th><th>Qtd Ana</th><th>% Qtd A.</th><th>% Valor F.</th><th>% Valor A.</th></tr></thead><tbody><tr><td>${esc(label)}</td><td>${s.fc}</td><td>${pct(s.fc, s.tc)}</td><td>${s.ac}</td><td>${pct(s.ac, s.tc)}</td><td>${pct(s.fv, s.tv)}</td><td>${pct(s.av, s.tv)}</td></tr></tbody></table>`;
   }
 
-  function executeCurrentFilter() {
-    if (!activeFilter) return modal("Selecione um filtro", "<p>Escolha um filtro e clique em <strong>Aplicar Filtro</strong> antes de executar.</p>");
-    if (activeFilter === "PENDENTE") return modal("Classificação pendente", "<p>Os registros deste filtro precisam ter o <strong>Tipo</strong> corrigido antes de executar o sorteio.</p>");
-    const rows = groupRows(activeFilter);
-    if (!rows.length) return modal("Filtro sem processos", `<p>O filtro <strong>${labels[activeFilter]}</strong> não possui processos.</p>`);
+  const selectionLabel = () => activeFilter || "TODOS";
 
-    let count;
+  function executeCurrentFilter() {
+    const rows = currentRows();
     try {
-      drawAll();
-      count = rows.length;
+      drawRows(rows);
     } catch (error) {
       return modal("Confira os reclamantes", `<p>${esc(error.message)}</p>`);
     }
-    filtered = groupRows(activeFilter);
+    filtered = currentRows();
     render(filtered);
     summaryUI(filtered);
-
-    const assignedAll = master.filter(row => partner(row)).length;
-    batchDone = assignedAll === master.length;
+    batchDone = master.every(row => partner(row));
     packageBtn.disabled = !batchDone;
-
-    modal("Sorteio do filtro concluído", `${resultForGroup(activeFilter)}<p class="fsp-ok"><strong>${count}</strong> processos do Tipo <strong>${labels[activeFilter]}</strong> foram processados.</p>${batchDone ? `<p class="fsp-ok">Todos os <strong>${master.length}</strong> processos já possuem atribuição.</p>` : `<p>Progresso do lote: <strong>${assignedAll}</strong> de <strong>${master.length}</strong>.</p>`}`);
+    const assignedAll = master.filter(row => partner(row)).length;
+    modal("Sorteio concluído", `${resultFor(filtered, selectionLabel())}<p class="fsp-ok"><strong>${rows.length}</strong> linhas de <strong>${esc(selectionLabel())}</strong> foram processadas.</p><p>Base com sócio: <strong>${assignedAll}</strong> de <strong>${master.length}</strong>.</p>`);
   }
 
   $("drawBtn").onclick = () => {
     if (!master.length) return modal("Atenção", "<p>Selecione a planilha primeiro.</p>");
-    if (!activeFilter) return modal("Selecione um filtro", "<p>Escolha um filtro, clique em <strong>Aplicar Filtro</strong> e depois execute o sorteio.</p>");
-    const data = groupRows(activeFilter);
-    const isRandom = RANDOM_GROUPS.includes(activeFilter);
-    const isPending = activeFilter === "PENDENTE";
-    const q = isRandom ? quota(data) : null;
-    const rule = isPending ? "Corrigir classificação antes do sorteio" : (isRandom ? "Meta de 60% Flávio / 40% Ana em quantidade e valor, mantendo os processos de cada reclamante com um único sócio" : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio"));
-    modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Os mesmos reclamantes em outros Tipos receberão o mesmo sócio. Grupos grandes podem afastar o resultado de 60% / 40%.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
+    const data = currentRows();
+    if (!data.length) return modal("Sem linhas", "<p>A busca não encontrou linhas para sortear.</p>");
+    modal("Confirmar sorteio", `<p>Busca: <strong>${esc(selectionLabel())}</strong></p><p>Linhas: <strong>${data.length}</strong></p><p>Regra: <strong>Meta de 60% Flávio / 40% Ana, mantendo cada reclamante com um único sócio</strong></p><p>Sócio a gerir e atribuições já feitas permanecem. O mesmo reclamante em outras linhas recebe o mesmo sócio.</p>`, {confirmText: "Executar sorteio", onConfirm: executeCurrentFilter});
   };
 
   function validateAndCommitRow(row, tr) {
-    const cells = [...tr.querySelectorAll("td[data-column]")];
-    const draft = {...row};
-
-    for (const td of cells) {
-      const column = td.dataset.column;
-      let value = td.textContent.trim();
-
-      if (column === "Reclamante" && !value) {
-        modal("Reclamante obrigatório", "<p>O campo <strong>Reclamante</strong> não pode ficar vazio.</p>");
-        return false;
-      }
-
-      if (column === "Tipo") {
-        const group = typeToGroup(value);
-        if (!group) {
-          modal("Tipo inválido", `<p>O Tipo <strong>${esc(value || "(vazio)")}</strong> não é reconhecido. Use uma das classificações válidas do aplicativo.</p>`);
-          return false;
-        }
-      }
-
-      if (column === "Sorteado Para") {
-        const p = norm(value);
-        if (p && !p.includes("ANA") && !p.includes("FLAVIO")) {
-          modal("Sócio inválido", "<p>Em <strong>Sorteado Para</strong>, use <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
-          return false;
-        }
-      }
-
-      if (column === "Sócio a gerir") {
-        const p = norm(value);
-        if (p && p !== "ANA" && p !== "FLAVIO") {
-          modal("Sócio a gerir inválido", "<p>Em <strong>Sócio a gerir</strong>, use somente <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
-          return false;
-        }
-      }
-
-      draft[column] = value;
+    for (const td of tr.querySelectorAll("td[data-column]")) {
+      const input = td.querySelector(".fsp-cell-input");
+      if (input) row[td.dataset.column] = input.value.trim();
     }
-
-    try {
-      window.FSPReclamadaRules.validate(master.map(item => item === row ? draft : item));
-    } catch (error) {
-      modal("Confira o reclamante e o sócio", `<p>${esc(error.message)}</p>`);
-      return false;
-    }
-    Object.assign(row, draft);
     buildGroups();
-
-    if (activeFilter) filtered = groupRows(activeFilter);
-    else if ($("searchInput").value.trim()) {
-      const text = norm($("searchInput").value);
-      filtered = master.filter(r =>
-        norm(r["Reclamante"]).includes(text) || norm(r["Reclamada"]).includes(text)
-      );
-    } else {
-      filtered = [...master];
-    }
-
+    filtered = currentRows();
     batchDone = master.length > 0 && master.every(r => partner(r));
     packageBtn.disabled = !batchDone;
     render(filtered);
@@ -644,12 +458,21 @@ window.addEventListener("DOMContentLoaded", () => {
 
     cells.forEach(td => {
       const column = td.dataset.column;
-      td.contentEditable = editing ? "true" : "false";
       td.classList.toggle("fsp-editing", editing);
-      td.title = editing ? "Edite o conteúdo desta célula" : "";
-
-      if (editing && column === "Valor da causa") {
-        td.textContent = String(row[column] ?? "");
+      if (editing) {
+        // Um campo próprio evita recalcular a tabela inteira a cada tecla em bases grandes.
+        const input = document.createElement("textarea");
+        input.className = "fsp-cell-input";
+        input.rows = 2;
+        input.spellcheck = false;
+        input.value = String(row[column] ?? "");
+        input.addEventListener("keydown", event => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            input.blur();
+          }
+        });
+        td.replaceChildren(input);
       }
     });
 
@@ -708,15 +531,8 @@ window.addEventListener("DOMContentLoaded", () => {
       cols.forEach(column => {
         const td = document.createElement("td");
         td.dataset.column = column;
-        td.contentEditable = "false";
         td.spellcheck = false;
         td.textContent = column === "Valor da causa" ? brl(row[column]) : (row[column] ?? "");
-        td.addEventListener("keydown", event => {
-          if (event.key === "Enter" && td.isContentEditable) {
-            event.preventDefault();
-            td.blur();
-          }
-        });
         tr.appendChild(td);
       });
 
@@ -740,8 +556,8 @@ window.addEventListener("DOMContentLoaded", () => {
         const editing = editBtn.textContent.includes("Salvar");
         if (!editing) {
           setRowEditing(tr, row, true);
-          const firstCell = tr.querySelector("td[data-column]");
-          if (firstCell) firstCell.focus();
+          const firstCell = tr.querySelector(".fsp-cell-input");
+          if (firstCell) firstCell.focus({preventScroll: true});
           return;
         }
         validateAndCommitRow(row, tr);
@@ -798,29 +614,9 @@ window.addEventListener("DOMContentLoaded", () => {
     $("valorTotal").textContent = brl(s.tv);
   }
 
-  function filterValueToGroup(value) {
-    const normalized = norm(value);
-    const map = {
-      "ALEATORIO": "ALEATORIO",
-      "IMPROCEDENTE": "IMPROCEDENTE",
-      "COMPROMETIDO": "COMPROMETIDO",
-      "ED": "ED",
-      "EF": "EF",
-      "EP": "EP",
-      "ANA MULLER": "ANA",
-      "FLAVIO MARQUES": "FLAVIO",
-      "NADJA/ANA": "NADJA",
-      "NADJA/FLAVIO": "NADJA/FLAVIO",
-      "PENDENTE": "PENDENTE"
-    };
-    return map[normalized] || "";
-  }
-
   function applyFilter() {
-    const group = filterValueToGroup($("filterInput").value);
-    if (!group) return modal("Filtro inválido", "<p>Selecione um Tipo válido.</p>");
-    activeFilter = group;
-    filtered = groupRows(group);
+    activeFilter = $("searchInput").value.trim();
+    filtered = currentRows();
     render(filtered);
     summaryUI(filtered);
   }
@@ -828,22 +624,10 @@ window.addEventListener("DOMContentLoaded", () => {
   $("applyFilterBtn").onclick = applyFilter;
   $("clearFiltersBtn").onclick = () => {
     $("searchInput").value = "";
-    $("filterInput").value = "";
-    activeFilter = "";
-    filtered = [...master];
-    render(filtered);
-    summaryUI(filtered);
+    applyFilter();
   };
 
-  $("searchInput").oninput = () => {
-    const text = norm($("searchInput").value);
-    activeFilter = "";
-    filtered = master.filter(row =>
-      norm(row["Reclamante"]).includes(text) || norm(row["Reclamada"]).includes(text)
-    );
-    render(filtered);
-    summaryUI(filtered);
-  };
+  $("searchInput").oninput = applyFilter;
 
   $("sortAZ").onclick = () => {
     filtered.sort((a, b) => String(a.Reclamante || "").localeCompare(String(b.Reclamante || ""), "pt-BR"));
@@ -974,29 +758,11 @@ window.addEventListener("DOMContentLoaded", () => {
         <label>Reclamante<input id="fspAddReclamante" class="input-text" type="text"></label>
         <label>Reclamada<input id="fspAddReclamada" class="input-text" type="text"></label>
         <label>Número de CNJ<input id="fspAddCNJ" class="input-text" type="text" placeholder="Pode ficar vazio"></label>
-        <label>Tipo
-          <select id="fspAddTipo" class="input-text">
-            <option value="">Escolha...</option>
-            <option value="ALEATÓRIO">ALEATÓRIO</option>
-            <option value="IMPROCEDENTE">IMPROCEDENTE</option>
-            <option value="COMPROMETIDO">COMPROMETIDO</option>
-            <option value="ED">ED</option>
-            <option value="EF">EF</option>
-            <option value="EP">EP</option>
-            <option value="ANA MULLER">ANA MULLER</option>
-            <option value="FLÁVIO MARQUES">FLÁVIO MARQUES</option>
-            <option value="NADJA/ANA">NADJA/ANA</option>
-            <option value="NADJA/FLÁVIO">NADJA/FLÁVIO</option>
-          </select>
-        </label>
+        <label>Tipo<input id="fspAddTipo" class="input-text" type="text" placeholder="Opcional"></label>
         <label>Valor da causa<input id="fspAddValor" class="input-text" type="text" placeholder="Ex.: 125000,00"></label>
         <label>Última Decisão<textarea id="fspAddDecisao" class="input-text" rows="3"></textarea></label>
         <label>Sócio a gerir
-          <select id="fspAddSocio" class="input-text">
-            <option value="">Em branco</option>
-            <option value="Flávio">Flávio</option>
-            <option value="Ana">Ana</option>
-          </select>
+          <input id="fspAddSocio" class="input-text" type="text">
         </label>
         <label>Status Antigo - Execução (REINALDO)<input id="fspAddStatusExecucao" class="input-text" type="text"></label>
         <label>Status Antigo - Demais (SORTEIO ANTIGO)<input id="fspAddStatusDemais" class="input-text" type="text"></label>
@@ -1055,12 +821,6 @@ window.addEventListener("DOMContentLoaded", () => {
         error.hidden = false;
         return;
       }
-      if (!tipo || !typeToGroup(tipo)) {
-        error.textContent = "Selecione um Tipo válido.";
-        error.hidden = false;
-        return;
-      }
-
       const novo = {
         "Reclamante": reclamante,
         "Reclamada": reclamada,
@@ -1075,20 +835,12 @@ window.addEventListener("DOMContentLoaded", () => {
         "Aba de origem": "ADICIONADO NO APP"
       };
 
-      try {
-        window.FSPReclamadaRules.validate([...master, novo]);
-      } catch (issue) {
-        error.textContent = issue.message;
-        error.hidden = false;
-        return;
-      }
       master.push(novo);
       buildGroups();
 
       activeFilter = "";
-      $("filterInput").value = "";
       $("searchInput").value = "";
-      filtered = [...master];
+      filtered = currentRows();
 
       batchDone = master.length > 0 && master.every(row => partner(row));
       packageBtn.disabled = !batchDone;
@@ -1125,7 +877,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   $("exportPDF").onclick = () => {
     if (!filtered.length) return modal("Sem dados", "<p>Nenhum dado para exportar.</p>");
-    const filterName = activeFilter ? labels[activeFilter] : "TODOS";
+    const filterName = selectionLabel();
     makePDF(activeFilter ? `Relatório - ${filterName}` : "Relatório de Processos", filtered, filterName).save(`PROCESSOS - ${safeReportName(filterName)}.pdf`);
   };
 
@@ -1135,136 +887,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const rows = filtered.map(row => Object.fromEntries(cols.map(column => [column, row[column] ?? ""])));
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows, {header: cols}), "Dados");
-    const filterName = activeFilter ? labels[activeFilter] : "TODOS";
+    const filterName = selectionLabel();
     XLSX.writeFile(workbook, `PROCESSOS - ${safeReportName(filterName)}.xlsx`);
-  };
-
-  async function loadJSZip() {
-    if (window.JSZip) return;
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
-      script.onload = resolve;
-      script.onerror = () => reject(Error("Falha ao carregar JSZip"));
-      document.head.appendChild(script);
-    });
-  }
-
-  function buildBatchExcelWorkbook() {
-    const workbook = XLSX.utils.book_new();
-    const cols = reportCols();
-
-    const resumo = ALL_GROUPS.map(group => {
-      const s = sum(groupRows(group));
-      return {
-        "Tipo": labels[group],
-        "Quantidade Total": s.tc,
-        "Qtd. Flávio": s.fc,
-        "% Qtd. Flávio": pct(s.fc, s.tc),
-        "Valor Flávio": s.fv,
-        "% Valor Flávio": pct(s.fv, s.tv),
-        "Qtd. Ana": s.ac,
-        "% Qtd. Ana": pct(s.ac, s.tc),
-        "Valor Ana": s.av,
-        "% Valor Ana": pct(s.av, s.tv),
-        "Valor Total": s.tv
-      };
-    });
-
-    const total = sum(master);
-    resumo.push({
-      "Tipo": "TOTAL GERAL",
-      "Quantidade Total": total.tc,
-      "Qtd. Flávio": total.fc,
-      "% Qtd. Flávio": pct(total.fc, total.tc),
-      "Valor Flávio": total.fv,
-      "% Valor Flávio": pct(total.fv, total.tv),
-      "Qtd. Ana": total.ac,
-      "% Qtd. Ana": pct(total.ac, total.tc),
-      "Valor Ana": total.av,
-      "% Valor Ana": pct(total.av, total.tv),
-      "Valor Total": total.tv
-    });
-
-    const resumoSheet = XLSX.utils.json_to_sheet(resumo);
-    resumoSheet["!cols"] = [
-      {wch: 24}, {wch: 17}, {wch: 14}, {wch: 15}, {wch: 18}, {wch: 16},
-      {wch: 12}, {wch: 14}, {wch: 18}, {wch: 15}, {wch: 18}
-    ];
-    XLSX.utils.book_append_sheet(workbook, resumoSheet, "RESUMO GERAL");
-
-    const nomesAbas = {
-      ALEATORIO: "ALEATORIO",
-      IMPROCEDENTE: "IMPROCEDENTE",
-      COMPROMETIDO: "COMPROMETIDO",
-      ED: "ED",
-      EF: "EF",
-      EP: "EP",
-      ANA: "ANA MULLER",
-      FLAVIO: "FLAVIO MARQUES",
-      NADJA: "NADJA-ANA",
-      "NADJA/FLAVIO": "NADJA-FLAVIO"
-    };
-
-    for (const group of ALL_GROUPS) {
-      const rows = groupRows(group);
-      if (!rows.length) continue;
-      const dados = rows.map(row => Object.fromEntries(cols.map(column => [
-        column,
-        column === "Valor da causa" ? parseBRL(row[column]) : (row[column] ?? "")
-      ])));
-      const sheet = XLSX.utils.json_to_sheet(dados, {header: cols});
-      sheet["!cols"] = [
-        {wch: 36}, {wch: 26}, {wch: 20}, {wch: 18}, {wch: 38}, {wch: 18}
-      ];
-      XLSX.utils.book_append_sheet(workbook, sheet, nomesAbas[group]);
-    }
-
-    const todos = master.map(row => Object.fromEntries(cols.map(column => [
-      column,
-      column === "Valor da causa" ? parseBRL(row[column]) : (row[column] ?? "")
-    ])));
-    const todosSheet = XLSX.utils.json_to_sheet(todos, {header: cols});
-    todosSheet["!cols"] = [
-      {wch: 36}, {wch: 26}, {wch: 20}, {wch: 18}, {wch: 38}, {wch: 18}
-    ];
-    XLSX.utils.book_append_sheet(workbook, todosSheet, "TODOS OS PROCESSOS");
-
-    return workbook;
-  }
-
-  packageBtn.onclick = async () => {
-    if (!batchDone) return modal("Atenção", "<p>Conclua todos os filtros antes de baixar os relatórios consolidados.</p>");
-    try {
-      await loadJSZip();
-      const zip = new JSZip();
-      const reports = [
-        ["ALEATORIO", "ALEATORIO"], ["IMPROCEDENTE", "IMPROCEDENTE"], ["COMPROMETIDO", "COMPROMETIDO"],
-        ["ED", "ED"], ["EF", "EF"], ["EP", "EP"], ["ANA", "ANA MULLER"], ["FLAVIO", "FLAVIO MARQUES"],
-        ["NADJA", "NADJA-ANA"], ["NADJA/FLAVIO", "NADJA-FLAVIO"]
-      ];
-      for (const [group, name] of reports) {
-        const rows = groupRows(group);
-        if (rows.length) zip.file(`${name}.pdf`, makePDF(name, rows).output("arraybuffer"));
-      }
-      zip.file("RESUMO CONSOLIDADO.pdf", makePDF("Resumo Consolidado", master).output("arraybuffer"));
-
-      const excelWorkbook = buildBatchExcelWorkbook();
-      const excelArray = XLSX.write(excelWorkbook, {bookType: "xlsx", type: "array"});
-      zip.file(`RESUMO_GERAL_SORTEIO_${new Date().toISOString().slice(0, 10)}.xlsx`, excelArray);
-
-      const blob = await zip.generateAsync({type: "blob"});
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `Relatorios_Sorteio_${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      modal("Erro ao gerar relatórios", `<p>${esc(error.message)}</p>`);
-    }
   };
 
   function reset() {
@@ -1275,10 +899,8 @@ window.addEventListener("DOMContentLoaded", () => {
     selected = [...DEFAULT_COLS];
     activeFilter = "";
     batchDone = false;
-    groupMap = new Map();
     $("excelFile").value = "";
     $("searchInput").value = "";
-    $("filterInput").value = "";
     $("headerRow").innerHTML = "";
     $("tableBody").innerHTML = "";
     colBtn.disabled = true;
@@ -1293,7 +915,7 @@ window.addEventListener("DOMContentLoaded", () => {
   cancelDrawBtn.id = "cancelDrawBtn";
   cancelDrawBtn.type = "button";
   cancelDrawBtn.className = "btn btn-laranja";
-  cancelDrawBtn.textContent = "CANCELAR SORTEIO";
+  cancelDrawBtn.textContent = "APAGAR SORTEIO";
   cancelDrawBtn.title = "Remove apenas as atribuições da coluna Sorteado Para; preserva todos os processos";
   $("drawBtn").insertAdjacentElement("afterend", cancelDrawBtn);
   cancelDrawBtn.onclick = () => {
@@ -1306,7 +928,7 @@ window.addEventListener("DOMContentLoaded", () => {
         master.forEach(row => { row["Sorteado Para"] = ""; });
         batchDone = false;
         packageBtn.disabled = true;
-        filtered = activeFilter ? groupRows(activeFilter) : [...master];
+        filtered = currentRows();
         render(filtered);
         summaryUI(filtered);
         modal("Sorteio cancelado", `<p class="fsp-ok">As atribuições de <strong>${assigned}</strong> processos foram removidas apenas da base carregada no navegador. Para obter o Excel sem atribuições, clique em <strong>BAIXAR BASE ATUALIZADA</strong>.</p>`);
