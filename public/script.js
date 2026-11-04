@@ -1,12 +1,17 @@
 window.addEventListener("DOMContentLoaded", () => {
   const THEME_STORAGE_KEY = "filtroSorteioProcessual.theme.v2";
-  const SOURCE_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
-  const DEFAULT_COLS = [...SOURCE_COLS, "Sorteado Para"];
-  const REQUIRED = ["Reclamante", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão"];
+  const SOURCE_COLS = [
+    "Reclamante", "Reclamada", "Número de CNJ", "Valor da causa", "Última Decisão",
+    "Sócio a gerir", "Status Antigo - Execução (REINALDO)",
+    "Status Antigo - Demais (SORTEIO ANTIGO)", "Tipo"
+  ];
+  const DEFAULT_COLS = [...SOURCE_COLS, "Sorteado Para", "Aba de origem"];
+  const REPORT_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Tipo", "Valor da causa", "Última Decisão", "Sorteado Para"];
+  const REQUIRED = ["Reclamante", "Tipo"];
 
   const RANDOM_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "ED", "EF", "EP"];
   const FIXED_GROUPS = ["COMPROMETIDO", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO"];
-  const ALL_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "COMPROMETIDO", "ED", "EF", "EP", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO"];
+  const ALL_GROUPS = ["ALEATORIO", "IMPROCEDENTE", "COMPROMETIDO", "ED", "EF", "EP", "ANA", "FLAVIO", "NADJA", "NADJA/FLAVIO", "PENDENTE"];
   const RANDOM_ATTEMPTS = 4000;
   const RANDOM_SWAP_PASSES = 20;
   const RANDOM_EARLY_TOLERANCE = 0.0001;
@@ -21,7 +26,8 @@ window.addEventListener("DOMContentLoaded", () => {
     ANA: "ANA MULLER",
     FLAVIO: "FLÁVIO MARQUES",
     NADJA: "NADJA/ANA",
-    "NADJA/FLAVIO": "NADJA/FLÁVIO"
+    "NADJA/FLAVIO": "NADJA/FLÁVIO",
+    PENDENTE: "PENDENTE DE CLASSIFICAÇÃO"
   };
 
   let loadedFile = null;
@@ -174,6 +180,12 @@ window.addEventListener("DOMContentLoaded", () => {
   `;
   document.head.appendChild(editStyle);
   $("drawBtn").textContent = "Executar Sorteio por filtro";
+  if ($("filterInput") && ![...$("filterInput").options].some(option => option.value === "PENDENTE")) {
+    const pendingOption = document.createElement("option");
+    pendingOption.value = "PENDENTE";
+    pendingOption.textContent = "PENDENTE DE CLASSIFICAÇÃO";
+    $("filterInput").appendChild(pendingOption);
+  }
 
   function typeToGroup(value) {
     const type = norm(value);
@@ -187,7 +199,8 @@ window.addEventListener("DOMContentLoaded", () => {
       "ANA MULLER": "ANA",
       "FLAVIO MARQUES": "FLAVIO",
       "NADJA/ANA": "NADJA",
-      "NADJA/FLAVIO": "NADJA/FLAVIO"
+      "NADJA/FLAVIO": "NADJA/FLAVIO",
+      "PENDENTE": "PENDENTE"
     };
     return map[type] || "";
   }
@@ -202,54 +215,125 @@ window.addEventListener("DOMContentLoaded", () => {
     return "";
   }
 
-  function normalizeSourceRow(row) {
+  function headerRowIndex(sheet) {
+    const preview = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: "", raw: true, range: 0});
+    const limit = Math.min(preview.length, 15);
+    for (let index = 0; index < limit; index++) {
+      const row = preview[index] || [];
+      const keys = row.map(norm);
+      if (keys.includes("RECLAMANTE") && (keys.includes("RECLAMADA") || keys.includes("NUMERO DE CNJ"))) return index;
+    }
+    return -1;
+  }
+
+  function fallbackTypeForSheet(sheetName, row) {
+    const name = norm(sheetName);
+    const decision = norm(sourceField(row, ["Última Decisão", "Ultima Decisao", "Decisão", "Decisao"]));
+    if (name === "ALEATORIO" || name.includes("PROC. MARQUES E MULLER")) return "ALEATÓRIO";
+    if (name.includes("IMPROCED")) return "IMPROCEDENTE";
+    if (name.includes("FLAVIO-RESP SOCIEDADE")) return "FLÁVIO MARQUES";
+    if (name.includes("ANA-RESP SOCIEDADE")) return "ANA MULLER";
+    if (name.includes("FLAVIO-COMPROMETIDOS")) return "COMPROMETIDO";
+    if (name.includes("FLAVIO PARTICULAR")) return "FLÁVIO MARQUES";
+    if (name.includes("ANA P. - COMPROMETIDOS")) return "ANA MULLER";
+    if (name.includes("FLAVIO (NADJA)")) return "NADJA/FLÁVIO";
+    if (name.includes("ANA P. (NADJA)")) return "NADJA/ANA";
+    if (decision.includes("IMPROCEDENTE")) return "IMPROCEDENTE";
+    return "PENDENTE";
+  }
+
+  function normalizeSourceRow(row, sheetName = "") {
+    const statusExecucao = sourceField(row, [
+      "Status Antigo - Execução (REINALDO)", "Status Antigo - Execucao (REINALDO)"
+    ]);
+    const statusDemais = sourceField(row, [
+      "Status Antigo - Demais (SORTEIO ANTIGO)", "Status Antigo Demais", "Status Antigo"
+    ]);
+    const directType = sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]);
+    let tipo = directType || statusDemais;
+    if (!typeToGroup(tipo)) tipo = typeToGroup(statusExecucao) ? statusExecucao : fallbackTypeForSheet(sheetName, row);
+    if (!typeToGroup(tipo)) tipo = "PENDENTE";
+
     return {
       "Reclamante": sourceField(row, ["Reclamante", "Cliente", "Nome do Reclamante"]),
       "Reclamada": sourceField(row, ["Reclamada", "Reclamado", "Nome da Reclamada", "Ré", "Reu", "Réu"]),
       "Número de CNJ": sourceField(row, ["Número de CNJ", "Numero de CNJ", "CNJ", "Nº", "N°", "Numero do Processo", "Número do Processo"]),
-      "Tipo": sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]),
       "Valor da causa": sourceField(row, ["Valor da causa", "Valor da Causa", "Valor"]),
       "Última Decisão": sourceField(row, ["Última Decisão", "Ultima Decisao", "Última decisão", "Decisão", "Decisao"]),
-      "Sorteado Para": sourceField(row, ["Sorteado Para"])
+      "Sócio a gerir": sourceField(row, ["Sócio a gerir", "Socio a gerir", "Sócio", "Socio"]),
+      "Status Antigo - Execução (REINALDO)": statusExecucao,
+      "Status Antigo - Demais (SORTEIO ANTIGO)": statusDemais,
+      "Tipo": tipo,
+      "Sorteado Para": sourceField(row, ["Sorteado Para"]),
+      "Aba de origem": sheetName
     };
   }
 
   function sheetRows(workbook, sheetName) {
-    if (!workbook.Sheets[sheetName]) return [];
-    return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {defval: "", raw: true})
-      .map(normalizeSourceRow)
-      .filter(row => String(row["Reclamante"] ?? "").trim());
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return [];
+    const headerIndex = headerRowIndex(sheet);
+    if (headerIndex < 0) return [];
+    return XLSX.utils.sheet_to_json(sheet, {defval: "", raw: true, range: headerIndex})
+      .map(row => normalizeSourceRow(row, sheetName))
+      .filter(row => {
+        const claimant = String(row["Reclamante"] ?? "").trim();
+        const hasData = [row["Reclamada"], row["Número de CNJ"], row["Valor da causa"], row["Tipo"]]
+          .some(value => String(value ?? "").trim());
+        return claimant && hasData && norm(claimant) !== "QUADRO RESUMO";
+      });
   }
 
   function onlyOperationalCols(row) {
-    return normalizeSourceRow(row);
+    return Object.fromEntries(DEFAULT_COLS.map(column => [column, row[column] ?? ""]));
+  }
+
+  function sheetLooksLikeStatusBase(workbook, sheetName) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return false;
+    const headerIndex = headerRowIndex(sheet);
+    if (headerIndex < 0) return false;
+    const preview = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: "", raw: true, range: headerIndex});
+    const headers = (preview[0] || []).map(norm);
+    return headers.some(header => header.includes("STATUS ANTIGO")) || headers.includes("SOCIO A GERIR");
   }
 
   function extractBase(workbook) {
     const preferred = workbook.SheetNames.find(name => norm(name) === "BASE PARA SORTEIO");
-    const detailed = workbook.SheetNames.find(name => norm(name) === "TODOS OS PROCESSOS") || workbook.SheetNames.find(name => norm(name) === "ALEATORIO") || workbook.SheetNames.find(name => norm(name).startsWith("ALEATORIO-"));
-    const sheetName = preferred || detailed || workbook.SheetNames[0];
-    const rows = sheetRows(workbook, sheetName);
-    if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
+    const allProcesses = workbook.SheetNames.find(name => norm(name) === "TODOS OS PROCESSOS");
+    let usedSheets = [];
+    let rows = [];
 
-    // Novo sorteio: ignorar sorteios anteriores inclusive quando Excel importado tem atribuições.
-    const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
-    const first = cleaned[0];
-    const missing = [];
-    if (!String(first["Reclamante"] ?? "").trim()) missing.push("Reclamante");
-    if (!String(first["Tipo"] ?? "").trim()) missing.push("Tipo");
-    if (missing.length) throw Error(`Colunas obrigatórias ausentes ou não reconhecidas: ${missing.join(", ")}.`);
-    const invalid = cleaned
-      .map((row, index) => ({line: index + 2, type: row.Tipo, group: typeToGroup(row.Tipo)}))
-      .filter(item => !item.group);
-
-    if (invalid.length) {
-      const sample = invalid.slice(0, 12).map(item => `linha ${item.line}: ${item.type || "(vazio)"}`).join("<br>");
-      throw Error(`Existem ${invalid.length} processo(s) com Tipo inválido ou vazio. Corrija a coluna Tipo antes do sorteio.<br>${sample}`);
+    if (preferred) {
+      usedSheets = [preferred];
+      rows = sheetRows(workbook, preferred);
+    } else if (allProcesses) {
+      usedSheets = [allProcesses];
+      rows = sheetRows(workbook, allProcesses);
+    } else {
+      const statusSheets = workbook.SheetNames.filter(name => sheetLooksLikeStatusBase(workbook, name));
+      if (statusSheets.length) {
+        usedSheets = statusSheets;
+        rows = statusSheets.flatMap(name => sheetRows(workbook, name));
+      } else {
+        const detailed = workbook.SheetNames.find(name => norm(name) === "ALEATORIO") || workbook.SheetNames[0];
+        usedSheets = detailed ? [detailed] : [];
+        rows = detailed ? sheetRows(workbook, detailed) : [];
+      }
     }
 
+    if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
+
+    // Novo sorteio: preserva os status e o Sócio a gerir da origem, mas limpa a nova atribuição.
+    const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
+    const pending = cleaned.filter(row => typeToGroup(row.Tipo) === "PENDENTE").length;
+
     window.FSPReclamadaRules.validate(cleaned);
-    return {rows: cleaned, sheetName};
+    return {
+      rows: cleaned,
+      sheetName: usedSheets.length === 1 ? usedSheets[0] : `${usedSheets.length} abas operacionais`,
+      pending
+    };
   }
 
   function buildGroups() {
@@ -342,6 +426,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Sorteio por filtro e sorteio em lote usam exatamente a mesma atribuição global.
   function drawAll() {
+    const unresolved = master.filter(row => typeToGroup(row.Tipo) === "PENDENTE");
+    if (unresolved.length) {
+      throw Error(`${unresolved.length} processo(s) estão com Tipo PENDENTE. Use o filtro PENDENTE DE CLASSIFICAÇÃO, edite os registros e defina o Tipo antes do sorteio.`);
+    }
     const snapshot = master.map(row => row["Sorteado Para"]);
     try {
       master.forEach(row => { row["Sorteado Para"] = ""; });
@@ -396,7 +484,7 @@ window.addEventListener("DOMContentLoaded", () => {
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
-        modal("Planilha carregada", `<p><strong>${master.length}</strong> processos foram lidos da aba <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo utiliza: <strong>Reclamante, Reclamada, Número de CNJ, Tipo, Valor da causa, Última Decisão e Sorteado Para</strong>. A coluna <strong>Sorteado Para</strong> foi zerada para este novo sorteio.</p>`);
+        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo reconhece a nova estrutura com <strong>Sócio a gerir</strong> e os dois campos de <strong>Status Antigo</strong>, mantendo esses dados editáveis. A coluna <strong>Tipo</strong> é derivada do status antigo quando necessário e <strong>Sorteado Para</strong> é zerada para o novo sorteio.</p>${result.pending ? `<p class="fsp-warn"><strong>${result.pending}</strong> registro(s) ficaram como <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. Eles podem ser filtrados e corrigidos diretamente no aplicativo antes do sorteio.</p>` : ""}`);
       } catch (error) {
         modal("Erro ao ler planilha", `<p>${error.message}</p>`);
         reset();
@@ -421,7 +509,8 @@ window.addEventListener("DOMContentLoaded", () => {
     for (const group of ALL_GROUPS) {
       const data = groupRows(group);
       const isRandom = RANDOM_GROUPS.includes(group);
-      const rule = isRandom ? "Meta 60/40, reclamante indivisível" : (["ANA", "NADJA"].includes(group) ? "100% Ana" : "100% Flávio");
+      const isPending = group === "PENDENTE";
+      const rule = isPending ? "Corrigir antes do sorteio" : (isRandom ? "Meta 60/40, reclamante indivisível" : (["ANA", "NADJA"].includes(group) ? "100% Ana" : "100% Flávio"));
       const q = isRandom ? quota(data) : null;
       rows += `<tr><td>${labels[group]}</td><td>${data.length}</td><td>${rule}</td><td>${q ? `${q.flavio} Flávio / ${q.ana} Ana` : rule}</td></tr>`;
     }
@@ -448,6 +537,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function executeCurrentFilter() {
     if (!activeFilter) return modal("Selecione um filtro", "<p>Escolha um filtro e clique em <strong>Aplicar Filtro</strong> antes de executar.</p>");
+    if (activeFilter === "PENDENTE") return modal("Classificação pendente", "<p>Os registros deste filtro precisam ter o <strong>Tipo</strong> corrigido antes de executar o sorteio.</p>");
     const rows = groupRows(activeFilter);
     if (!rows.length) return modal("Filtro sem processos", `<p>O filtro <strong>${labels[activeFilter]}</strong> não possui processos.</p>`);
 
@@ -509,6 +599,11 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       draft[column] = value;
+    }
+
+    const statusType = draft["Status Antigo - Demais (SORTEIO ANTIGO)"];
+    if ((!draft.Tipo || typeToGroup(draft.Tipo) === "PENDENTE") && typeToGroup(statusType) && typeToGroup(statusType) !== "PENDENTE") {
+      draft.Tipo = statusType;
     }
 
     try {
@@ -708,7 +803,8 @@ window.addEventListener("DOMContentLoaded", () => {
       "ANA MULLER": "ANA",
       "FLAVIO MARQUES": "FLAVIO",
       "NADJA/ANA": "NADJA",
-      "NADJA/FLAVIO": "NADJA/FLAVIO"
+      "NADJA/FLAVIO": "NADJA/FLAVIO",
+      "PENDENTE": "PENDENTE"
     };
     return map[normalized] || "";
   }
@@ -763,7 +859,7 @@ window.addEventListener("DOMContentLoaded", () => {
     summaryUI(filtered);
   };
 
-  const reportCols = () => DEFAULT_COLS;
+  const reportCols = () => REPORT_COLS;
 
   function pdfFooterName(rows) {
     const s = sum(rows);
@@ -886,6 +982,15 @@ window.addEventListener("DOMContentLoaded", () => {
         </label>
         <label>Valor da causa<input id="fspAddValor" class="input-text" type="text" placeholder="Ex.: 125000,00"></label>
         <label>Última Decisão<textarea id="fspAddDecisao" class="input-text" rows="3"></textarea></label>
+        <label>Sócio a gerir
+          <select id="fspAddSocio" class="input-text">
+            <option value="">Em branco</option>
+            <option value="Flávio">Flávio</option>
+            <option value="Ana">Ana</option>
+          </select>
+        </label>
+        <label>Status Antigo - Execução (REINALDO)<input id="fspAddStatusExecucao" class="input-text" type="text"></label>
+        <label>Status Antigo - Demais (SORTEIO ANTIGO)<input id="fspAddStatusDemais" class="input-text" type="text"></label>
         <label>Sorteado Para
           <select id="fspAddSorteado" class="input-text">
             <option value="">Em branco</option>
@@ -930,6 +1035,9 @@ window.addEventListener("DOMContentLoaded", () => {
       const tipo = $("fspAddTipo").value.trim();
       const valor = $("fspAddValor").value.trim();
       const decisao = $("fspAddDecisao").value.trim();
+      const socio = $("fspAddSocio").value.trim();
+      const statusExecucao = $("fspAddStatusExecucao").value.trim();
+      const statusDemais = $("fspAddStatusDemais").value.trim();
       const sorteado = $("fspAddSorteado").value.trim();
       const error = $("fspAddError");
 
@@ -948,10 +1056,14 @@ window.addEventListener("DOMContentLoaded", () => {
         "Reclamante": reclamante,
         "Reclamada": reclamada,
         "Número de CNJ": cnj,
-        "Tipo": tipo,
         "Valor da causa": valor,
         "Última Decisão": decisao,
-        "Sorteado Para": sorteado
+        "Sócio a gerir": socio,
+        "Status Antigo - Execução (REINALDO)": statusExecucao,
+        "Status Antigo - Demais (SORTEIO ANTIGO)": statusDemais,
+        "Tipo": tipo,
+        "Sorteado Para": sorteado,
+        "Aba de origem": "ADICIONADO NO APP"
       };
 
       try {
@@ -991,7 +1103,8 @@ window.addEventListener("DOMContentLoaded", () => {
       const workbook = XLSX.utils.book_new();
       const sheet = XLSX.utils.json_to_sheet(rows, {header: cols});
       sheet["!cols"] = [
-        {wch: 38}, {wch: 48}, {wch: 27}, {wch: 18}, {wch: 20}, {wch: 48}, {wch: 20}
+        {wch: 38}, {wch: 48}, {wch: 27}, {wch: 18}, {wch: 48},
+        {wch: 18}, {wch: 30}, {wch: 36}, {wch: 18}, {wch: 20}, {wch: 32}
       ];
       XLSX.utils.book_append_sheet(workbook, sheet, "BASE PARA SORTEIO");
       XLSX.writeFile(workbook, `BASE_SORTEIO_ATUALIZADA_${new Date().toISOString().slice(0,10)}.xlsx`);
