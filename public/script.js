@@ -238,10 +238,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "Status Antigo - Demais (SORTEIO ANTIGO)", "Status Antigo Demais", "Status Antigo"
     ]);
     const directType = sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]);
-    let tipo = typeToGroup(directType) ? directType : "";
-    if (!tipo && typeToGroup(statusDemais)) tipo = statusDemais;
-    if (!tipo && typeToGroup(statusExecucao)) tipo = statusExecucao;
-    if (!tipo) tipo = "PENDENTE";
+    const tipo = typeToGroup(directType) ? directType : "PENDENTE";
 
     return {
       "Reclamante": sourceField(row, ["Reclamante", "Cliente", "Nome do Reclamante"]),
@@ -345,8 +342,9 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function quota(rows) {
-    const flavio = Math.round(rows.length * 0.60);
-    return {flavio, ana: rows.length - flavio};
+    const total = uniqueForRateio(rows).length;
+    const flavio = Math.round(total * 0.60);
+    return {flavio, ana: total - flavio};
   }
 
   function shuffled(rows) {
@@ -476,7 +474,7 @@ window.addEventListener("DOMContentLoaded", () => {
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
-        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo reconhece a nova estrutura com <strong>Sócio a gerir</strong> e os dois campos de <strong>Status Antigo</strong>, mantendo esses dados editáveis. A coluna <strong>Tipo</strong> é derivada do status antigo quando necessário e <strong>Sorteado Para</strong> é zerada para o novo sorteio.</p>${result.pending ? `<p class="fsp-warn"><strong>${result.pending}</strong> registro(s) ficaram como <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. Eles podem ser filtrados e corrigidos diretamente no aplicativo antes do sorteio.</p>` : ""}`);
+        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">O aplicativo reconhece a nova estrutura com <strong>Sócio a gerir</strong> e os dois campos de <strong>Status Antigo</strong>, mantendo esses dados editáveis. Os campos de Status Antigo são apenas históricos; a classificação do sorteio usa a coluna <strong>Tipo</strong>. Quando o Tipo não for válido, o registro fica <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. <strong>Sorteado Para</strong> é zerada para o novo sorteio.</p>${result.pending ? `<p class="fsp-warn"><strong>${result.pending}</strong> registro(s) ficaram como <strong>PENDENTE DE CLASSIFICAÇÃO</strong>. Eles podem ser filtrados e corrigidos diretamente no aplicativo antes do sorteio.</p>` : ""}`);
       } catch (error) {
         modal("Erro ao ler planilha", `<p>${error.message}</p>`);
         reset();
@@ -567,8 +565,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!activeFilter) return modal("Selecione um filtro", "<p>Escolha um filtro, clique em <strong>Aplicar Filtro</strong> e depois execute o sorteio.</p>");
     const data = groupRows(activeFilter);
     const isRandom = RANDOM_GROUPS.includes(activeFilter);
+    const isPending = activeFilter === "PENDENTE";
     const q = isRandom ? quota(data) : null;
-    const rule = isRandom ? "Meta de 60% Flávio / 40% Ana em quantidade e valor, mantendo os processos de cada reclamante com um único sócio" : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio");
+    const rule = isPending ? "Corrigir classificação antes do sorteio" : (isRandom ? "Meta de 60% Flávio / 40% Ana em quantidade e valor, mantendo os processos de cada reclamante com um único sócio" : (["ANA", "NADJA"].includes(activeFilter) ? "100% Ana" : "100% Flávio"));
     modal("Confirmar sorteio por filtro", `<p>Tipo: <strong>${labels[activeFilter]}</strong></p><p>Processos: <strong>${data.length}</strong></p><p>Regra: <strong>${rule}</strong></p><p>Os mesmos reclamantes em outros Tipos receberão o mesmo sócio. Grupos grandes podem afastar o resultado de 60% / 40%.</p>`, {confirmText: "Executar este filtro", onConfirm: executeCurrentFilter});
   };
 
@@ -610,11 +609,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       draft[column] = value;
-    }
-
-    const statusType = draft["Status Antigo - Demais (SORTEIO ANTIGO)"];
-    if ((!draft.Tipo || typeToGroup(draft.Tipo) === "PENDENTE") && typeToGroup(statusType) && typeToGroup(statusType) !== "PENDENTE") {
-      draft.Tipo = statusType;
     }
 
     try {
