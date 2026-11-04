@@ -7,6 +7,8 @@ window.addEventListener("DOMContentLoaded", () => {
     <section class="tips-step"><h3><span>1</span> Buscar</h3><ol>
       <li>Digite um nome ou palavra em <strong>Buscar</strong>. Aparecem todas as linhas que contêm essa palavra exata, em qualquer coluna e em todas as abas.</li>
       <li>Exemplo: <strong>ANA</strong> encontra "ANA MARIA", mas não "SANTANA".</li>
+      <li>A tabela mostra 100 linhas por página. Use <strong>Anterior</strong> e <strong>Próxima</strong> ou escolha 250, 500 ou Todas.</li>
+      <li><strong>Selecionar Todos</strong> marca todas as linhas da lista, em todas as páginas.</li>
     </ol></section>
     <section class="tips-step"><h3><span>2</span> Editar</h3><ol>
       <li>Use ✏️ para editar a linha e 💾 para salvar. Todos os campos são editáveis.</li>

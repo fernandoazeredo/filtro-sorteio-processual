@@ -15,6 +15,9 @@ window.addEventListener("DOMContentLoaded", () => {
   let available = [...DEFAULT_COLS];
   let selected = [...DEFAULT_COLS];
   let activeFilter = "";
+  let pageSize = 100;
+  let pageIndex = 0;
+  const selectedRows = new Set();
   let batchDone = false;
 
   const $ = id => document.getElementById(id);
@@ -360,6 +363,8 @@ window.addEventListener("DOMContentLoaded", () => {
         buildGroups();
         filtered = [...master];
         activeFilter = "";
+        pageIndex = 0;
+        selectedRows.clear();
         batchDone = false;
         colBtn.disabled = false;
         previewBtn.disabled = false;
@@ -493,11 +498,77 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function syncSelectAll(box, data) {
+    box.checked = data.length > 0 && data.every(row => selectedRows.has(row));
+  }
+
+  function currentPageRows(data) {
+    const size = pageSize || data.length || 1;
+    const lastPage = Math.max(0, Math.ceil(data.length / size) - 1);
+    pageIndex = Math.min(pageIndex, lastPage);
+    return data.slice(pageIndex * size, (pageIndex + 1) * size);
+  }
+
+  const pager = document.createElement("div");
+  pager.id = "fspPager";
+  pager.hidden = true;
+  pager.innerHTML = `
+    <strong id="fspPagerInfo"></strong>
+    <button id="fspPagerPrev" class="btn btn-neutral" type="button">◀ Anterior</button>
+    <span id="fspPagerPage"></span>
+    <button id="fspPagerNext" class="btn btn-neutral" type="button">Próxima ▶</button>
+    <label>Linhas por página
+      <select id="fspPagerSize" class="input-text">
+        <option value="100">100</option>
+        <option value="250">250</option>
+        <option value="500">500</option>
+        <option value="0">Todas</option>
+      </select>
+    </label>
+  `;
+  document.querySelector(".tabela-area").before(pager);
+  const pagerStyle = document.createElement("style");
+  pagerStyle.textContent = `
+    #fspPager{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px}
+    #fspPager[hidden]{display:none}
+    #fspPager label{display:flex;align-items:center;gap:6px;margin-left:auto}
+    #fspPager select{width:auto}
+  `;
+  document.head.appendChild(pagerStyle);
+
+  function updatePager(data) {
+    pager.hidden = !data.length;
+    if (!data.length) return;
+    const size = pageSize || data.length;
+    const first = pageIndex * size + 1;
+    const last = Math.min((pageIndex + 1) * size, data.length);
+    const pages = Math.ceil(data.length / size);
+    $("fspPagerInfo").textContent = `Linhas ${first.toLocaleString("pt-BR")} a ${last.toLocaleString("pt-BR")} de ${data.length.toLocaleString("pt-BR")}`;
+    $("fspPagerPage").textContent = `Página ${pageIndex + 1} de ${pages}`;
+    $("fspPagerPrev").disabled = pageIndex === 0;
+    $("fspPagerNext").disabled = pageIndex >= pages - 1;
+  }
+
+  function goToPage(index) {
+    pageIndex = Math.max(0, index);
+    render(filtered);
+    document.querySelector(".tabela-area").scrollTop = 0;
+  }
+
+  $("fspPagerPrev").onclick = () => goToPage(pageIndex - 1);
+  $("fspPagerNext").onclick = () => goToPage(pageIndex + 1);
+  $("fspPagerSize").onchange = event => {
+    pageSize = Number(event.target.value);
+    goToPage(0);
+  };
+
   function render(data) {
     const header = $("headerRow");
     const body = $("tableBody");
     header.innerHTML = "";
     body.innerHTML = "";
+    const pageRows = currentPageRows(data);
+    updatePager(data);
     if (!data.length) return;
 
     const cols = selected.filter(column => available.includes(column));
@@ -518,13 +589,18 @@ window.addEventListener("DOMContentLoaded", () => {
     actionsHeader.style.whiteSpace = "nowrap";
     header.appendChild(actionsHeader);
 
-    data.forEach((row, index) => {
+    pageRows.forEach(row => {
       const tr = document.createElement("tr");
       const selectorCell = document.createElement("td");
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.className = "rowCheckbox";
-      checkbox.dataset.index = index;
+      checkbox.checked = selectedRows.has(row);
+      checkbox.onchange = () => {
+        if (checkbox.checked) selectedRows.add(row);
+        else selectedRows.delete(row);
+        syncSelectAll(selectAll, data);
+      };
       selectorCell.appendChild(checkbox);
       tr.appendChild(selectorCell);
 
@@ -581,6 +657,7 @@ window.addEventListener("DOMContentLoaded", () => {
             onConfirm: () => {
               master = master.filter(item => item !== row);
               filtered = filtered.filter(item => item !== row);
+              selectedRows.delete(row);
               buildGroups();
               batchDone = master.length > 0 && master.every(r => partner(r));
               packageBtn.disabled = !batchDone;
@@ -597,7 +674,13 @@ window.addEventListener("DOMContentLoaded", () => {
       body.appendChild(tr);
     });
 
-    selectAll.onchange = () => document.querySelectorAll(".rowCheckbox").forEach(box => box.checked = selectAll.checked);
+    syncSelectAll(selectAll, data);
+    selectAll.title = "Seleciona todas as linhas da lista, em todas as páginas";
+    selectAll.onchange = () => {
+      if (selectAll.checked) data.forEach(row => selectedRows.add(row));
+      else selectedRows.clear();
+      render(data);
+    };
   }
 
   function summaryUI(data) {
@@ -617,6 +700,8 @@ window.addEventListener("DOMContentLoaded", () => {
   function applyFilter() {
     activeFilter = $("searchInput").value.trim();
     filtered = currentRows();
+    pageIndex = 0;
+    selectedRows.clear();
     render(filtered);
     summaryUI(filtered);
   }
@@ -631,20 +716,23 @@ window.addEventListener("DOMContentLoaded", () => {
 
   $("sortAZ").onclick = () => {
     filtered.sort((a, b) => String(a.Reclamante || "").localeCompare(String(b.Reclamante || ""), "pt-BR"));
+    pageIndex = 0;
     render(filtered);
   };
   $("sortZA").onclick = () => {
     filtered.sort((a, b) => String(b.Reclamante || "").localeCompare(String(a.Reclamante || ""), "pt-BR"));
+    pageIndex = 0;
     render(filtered);
   };
-  $("selectAllBtn").onclick = () => document.querySelectorAll(".rowCheckbox").forEach(box => box.checked = true);
+  $("selectAllBtn").onclick = () => {
+    filtered.forEach(row => selectedRows.add(row));
+    render(filtered);
+  };
   $("deleteSelBtn").onclick = () => {
-    const indexes = [...document.querySelectorAll(".rowCheckbox:checked")].map(box => +box.dataset.index).sort((a, b) => b - a);
-    for (const index of indexes) {
-      const item = filtered[index];
-      master = master.filter(row => row !== item);
-      filtered.splice(index, 1);
-    }
+    if (!selectedRows.size) return;
+    master = master.filter(row => !selectedRows.has(row));
+    filtered = filtered.filter(row => !selectedRows.has(row));
+    selectedRows.clear();
     buildGroups();
     batchDone = master.length > 0 && master.every(row => partner(row));
     packageBtn.disabled = !batchDone;
@@ -841,6 +929,8 @@ window.addEventListener("DOMContentLoaded", () => {
       activeFilter = "";
       $("searchInput").value = "";
       filtered = currentRows();
+      selectedRows.clear();
+      pageIndex = pageSize ? Math.ceil(filtered.length / pageSize) - 1 : 0;
 
       batchDone = master.length > 0 && master.every(row => partner(row));
       packageBtn.disabled = !batchDone;
@@ -898,6 +988,8 @@ window.addEventListener("DOMContentLoaded", () => {
     available = [...DEFAULT_COLS];
     selected = [...DEFAULT_COLS];
     activeFilter = "";
+    pageIndex = 0;
+    selectedRows.clear();
     batchDone = false;
     $("excelFile").value = "";
     $("searchInput").value = "";
