@@ -168,10 +168,14 @@ window.addEventListener("DOMContentLoaded", () => {
     #mainTable{table-layout:fixed;width:max(100%,2240px)}
     #mainTable th,#mainTable td{overflow-wrap:anywhere;vertical-align:top}
     #mainTable th:nth-child(1){width:44px}
-    #mainTable th:nth-child(2),#mainTable th:nth-child(3){width:280px}
-    #mainTable th:nth-child(4){width:220px}
-    #mainTable th:nth-child(5){width:140px}
-    #mainTable th:nth-child(6){width:240px}
+    #mainTable th[data-column="Reclamante"],#mainTable th[data-column="Reclamada"]{width:280px}
+    #mainTable th[data-column="Sorteado Para"]{width:130px}
+    #mainTable th[data-column="Número de CNJ"]{width:220px}
+    #mainTable th[data-column="Valor da causa"]{width:140px}
+    #mainTable th[data-column="Última Decisão"]{width:240px}
+    #mainTable th[data-column="Sorteado Para"]{background:#f59e0b;color:#1f2937}
+    #mainTable td[data-column="Sorteado Para"]{background:#fef3c7;color:#1f2937;font-weight:700}
+    :root[data-theme="dark"] #mainTable td[data-column="Sorteado Para"]{background:#78350f;color:#fef3c7}
     #mainTable th:last-child{width:190px}
   `;
   document.head.appendChild(editStyle);
@@ -301,7 +305,8 @@ window.addEventListener("DOMContentLoaded", () => {
   function currentRows() {
     const matcher = wordMatcher(activeFilter);
     if (!matcher) return [...master];
-    return master.filter(row => DEFAULT_COLS.some(column => matcher.test(norm(row[column]))));
+    // O resultado do sorteio não entra no filtro, para a seleção não mudar depois de sortear.
+    return master.filter(row => DEFAULT_COLS.some(column => column !== "Sorteado Para" && matcher.test(norm(row[column]))));
   }
 
   const causeValue = row => parseBRL(row["Valor da causa"]);
@@ -312,6 +317,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const selection = master.filter(row => chosen.has(row));
     const snapshot = master.map(row => row["Sorteado Para"]);
     try {
+      selection.forEach(row => { row["Sorteado Para"] = ""; });
       window.FSPReclamadaRules.assign(master, selection, causeValue);
       window.FSPReclamadaRules.validate(master);
     } catch (error) {
@@ -373,7 +379,7 @@ window.addEventListener("DOMContentLoaded", () => {
         packageBtn.disabled = true;
         render(filtered);
         summaryUI(filtered);
-        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">Busque qualquer nome, edite o que precisar e sorteie as linhas encontradas. <strong>Sócio a gerir</strong> preenchido permanece; o restante é sorteado.</p>`);
+        modal("Planilha carregada", `<p><strong>${master.length}</strong> registros foram lidos de <strong>${esc(result.sheetName)}</strong>.</p><p class="fsp-ok">Filtre qualquer nome, edite o que precisar e sorteie as linhas encontradas. <strong>Sorteado Para</strong> começa vazia e recebe o resultado do sorteio.</p>`);
       } catch (error) {
         modal("Erro ao ler planilha", `<p>${error.message}</p>`);
         reset();
@@ -394,9 +400,8 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   function previewHtml() {
-    const count = name => master.filter(row => norm(row["Sócio a gerir"]) === name).length;
-    const ana = count("ANA"), flavio = count("FLAVIO");
-    return `<table><thead><tr><th>Situação</th><th>Qtd.</th></tr></thead><tbody><tr><td>Sócio a gerir: Flávio</td><td>${flavio}</td></tr><tr><td>Sócio a gerir: Ana</td><td>${ana}</td></tr><tr><td>A sortear</td><td>${master.length - ana - flavio}</td></tr></tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">Cada reclamante fica com um único sócio.</p>`;
+    const assigned = master.filter(row => partner(row)).length;
+    return `<table><thead><tr><th>Situação</th><th>Qtd.</th></tr></thead><tbody><tr><td>Com Sorteado Para</td><td>${assigned}</td></tr><tr><td>A sortear</td><td>${master.length - assigned}</td></tr></tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">Cada reclamante fica com um único sócio.</p>`;
   }
 
   previewBtn.onclick = () => modal("Conferência dos grupos", previewHtml());
@@ -438,8 +443,8 @@ window.addEventListener("DOMContentLoaded", () => {
   $("drawBtn").onclick = () => {
     if (!master.length) return modal("Atenção", "<p>Selecione a planilha primeiro.</p>");
     const data = currentRows();
-    if (!data.length) return modal("Sem linhas", "<p>A busca não encontrou linhas para sortear.</p>");
-    modal("Confirmar sorteio", `<p>Busca: <strong>${esc(selectionLabel())}</strong></p><p>Linhas: <strong>${data.length}</strong></p><p>Regra: <strong>Meta de 60% Flávio / 40% Ana, mantendo cada reclamante com um único sócio</strong></p><p>Sócio a gerir e atribuições já feitas permanecem. O mesmo reclamante em outras linhas recebe o mesmo sócio.</p>`, {confirmText: "Executar sorteio", onConfirm: executeCurrentFilter});
+    if (!data.length) return modal("Sem linhas", "<p>O filtro não encontrou linhas para sortear.</p>");
+    modal("Confirmar sorteio", `<p>Filtro: <strong>${esc(selectionLabel())}</strong></p><p>Linhas: <strong>${data.length}</strong></p><p>Regra: <strong>Meta de 60% Flávio / 40% Ana, mantendo cada reclamante com um único sócio</strong></p><p>O resultado será gravado em <strong>Sorteado Para</strong>. O mesmo reclamante em outras linhas recebe o mesmo sócio.</p>`, {confirmText: "Executar sorteio", onConfirm: executeCurrentFilter});
   };
 
   function validateAndCommitRow(row, tr) {
@@ -571,7 +576,10 @@ window.addEventListener("DOMContentLoaded", () => {
     updatePager(data);
     if (!data.length) return;
 
-    const cols = selected.filter(column => available.includes(column));
+    const chosen = selected.filter(column => available.includes(column));
+    // Na tela, Sorteado Para fica ao lado dos nomes para o resultado ser visto sem rolar.
+    const first = ["Reclamante", "Reclamada", "Sorteado Para"].filter(column => chosen.includes(column));
+    const cols = [...first, ...chosen.filter(column => !first.includes(column))];
     const selectHeader = document.createElement("th");
     const selectAll = document.createElement("input");
     selectAll.type = "checkbox";
@@ -581,6 +589,7 @@ window.addEventListener("DOMContentLoaded", () => {
     cols.forEach(column => {
       const th = document.createElement("th");
       th.textContent = column === "Valor da causa" ? "Valor da causa (R$)" : column;
+      th.dataset.column = column;
       header.appendChild(th);
     });
 
