@@ -2,8 +2,6 @@
 ((root) => {
   'use strict';
   const key = value => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/\s+/g, ' ').trim();
-  // Sócio a gerir preenchido com Ana ou Flávio permanece; o restante é sorteado.
-  const fixed = row => ({ANA:'Ana',FLAVIO:'Flávio'}[key(row['Sócio a gerir'])] || '');
   const owner = row => key(row['Sorteado Para']).includes('FLAVIO') ? 'Flávio' : key(row['Sorteado Para']).includes('ANA') ? 'Ana' : '';
   function units(rows) {
     const groups = new Map();
@@ -12,9 +10,9 @@
       if (!claimant) throw Error(`Linha ${index+2} sem Reclamante.`);
       if (!groups.has(claimant)) groups.set(claimant, {name: claimant, rows:[], owner:''});
       const group = groups.get(claimant);
-      for (const assigned of [fixed(row), owner(row)].filter(Boolean)) {
+      for (const assigned of [owner(row)].filter(Boolean)) {
         if (group.owner && group.owner !== assigned)
-          throw Error(`O reclamante ${row.Reclamante} possui atribuições incompatíveis. Confira as colunas Sócio a gerir e Sorteado Para.`);
+          throw Error(`O reclamante ${row.Reclamante} possui atribuições incompatíveis. Confira a coluna Sorteado Para.`);
         group.owner = assigned;
       }
       group.rows.push(row);
