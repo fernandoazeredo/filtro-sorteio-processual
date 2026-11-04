@@ -57,7 +57,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const negative = /^-|^-\s*R\$|^\(.*\)$/i.test(text);
     if (/^\(.*\)$/.test(text)) text = text.slice(1, -1);
     text = text.replace(/R\$/gi, "").replace(/-/g, "").replace(/\s/g, "");
-    if (text.includes(",")) text = text.replace(/\./g, "").replace(/,/g, ".");
+    if (text.includes(",")) {
+      text = text.replace(/\./g, "").replace(/,/g, ".");
+    } else if (/^\d{1,3}(\.\d{3})+$/.test(text)) {
+      text = text.replace(/\./g, "");
+    }
     const number = Number.parseFloat(text);
     return Number.isFinite(number) ? (negative ? -number : number) : 0;
   };
@@ -226,22 +230,6 @@ window.addEventListener("DOMContentLoaded", () => {
     return -1;
   }
 
-  function fallbackTypeForSheet(sheetName, row) {
-    const name = norm(sheetName);
-    const decision = norm(sourceField(row, ["Última Decisão", "Ultima Decisao", "Decisão", "Decisao"]));
-    if (name === "ALEATORIO" || name.includes("PROC. MARQUES E MULLER")) return "ALEATÓRIO";
-    if (name.includes("IMPROCED")) return "IMPROCEDENTE";
-    if (name.includes("FLAVIO-RESP SOCIEDADE")) return "FLÁVIO MARQUES";
-    if (name.includes("ANA-RESP SOCIEDADE")) return "ANA MULLER";
-    if (name.includes("FLAVIO-COMPROMETIDOS")) return "COMPROMETIDO";
-    if (name.includes("FLAVIO PARTICULAR")) return "FLÁVIO MARQUES";
-    if (name.includes("ANA P. - COMPROMETIDOS")) return "ANA MULLER";
-    if (name.includes("FLAVIO (NADJA)")) return "NADJA/FLÁVIO";
-    if (name.includes("ANA P. (NADJA)")) return "NADJA/ANA";
-    if (decision.includes("IMPROCEDENTE")) return "IMPROCEDENTE";
-    return "PENDENTE";
-  }
-
   function normalizeSourceRow(row, sheetName = "") {
     const statusExecucao = sourceField(row, [
       "Status Antigo - Execução (REINALDO)", "Status Antigo - Execucao (REINALDO)"
@@ -250,9 +238,10 @@ window.addEventListener("DOMContentLoaded", () => {
       "Status Antigo - Demais (SORTEIO ANTIGO)", "Status Antigo Demais", "Status Antigo"
     ]);
     const directType = sourceField(row, ["Tipo", "Classificação", "Classificacao", "Categoria"]);
-    let tipo = directType || statusDemais;
-    if (!typeToGroup(tipo)) tipo = typeToGroup(statusExecucao) ? statusExecucao : fallbackTypeForSheet(sheetName, row);
-    if (!typeToGroup(tipo)) tipo = "PENDENTE";
+    let tipo = typeToGroup(directType) ? directType : "";
+    if (!tipo && typeToGroup(statusDemais)) tipo = statusDemais;
+    if (!tipo && typeToGroup(statusExecucao)) tipo = statusExecucao;
+    if (!tipo) tipo = "PENDENTE";
 
     return {
       "Reclamante": sourceField(row, ["Reclamante", "Cliente", "Nome do Reclamante"]),
@@ -265,7 +254,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "Status Antigo - Demais (SORTEIO ANTIGO)": statusDemais,
       "Tipo": tipo,
       "Sorteado Para": sourceField(row, ["Sorteado Para"]),
-      "Aba de origem": sheetName
+      "Aba de origem": sourceField(row, ["Aba de origem", "Aba Origem"]) || sheetName
     };
   }
 
@@ -278,9 +267,12 @@ window.addEventListener("DOMContentLoaded", () => {
       .map(row => normalizeSourceRow(row, sheetName))
       .filter(row => {
         const claimant = String(row["Reclamante"] ?? "").trim();
-        const hasData = [row["Reclamada"], row["Número de CNJ"], row["Valor da causa"], row["Tipo"]]
-          .some(value => String(value ?? "").trim());
-        return claimant && hasData && norm(claimant) !== "QUADRO RESUMO";
+        const claimantKey = norm(claimant);
+        const hasIdentity = String(row["Reclamada"] ?? "").trim() || String(row["Número de CNJ"] ?? "").trim();
+        const summaryLabels = new Set(["QUADRO RESUMO", "SOCIO", "FLAVIO", "ANA", "SEM SOCIO DEFINIDO", "TOTAL"]);
+        if (!claimant) return false;
+        if (summaryLabels.has(claimantKey) && !hasIdentity) return false;
+        return true;
       });
   }
 
@@ -514,14 +506,25 @@ window.addEventListener("DOMContentLoaded", () => {
       const q = isRandom ? quota(data) : null;
       rows += `<tr><td>${labels[group]}</td><td>${data.length}</td><td>${rule}</td><td>${q ? `${q.flavio} Flávio / ${q.ana} Ana` : rule}</td></tr>`;
     }
-    return `<table><thead><tr><th>Tipo</th><th>Qtd.</th><th>Regra</th><th>Meta de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">O Tipo classifica os processos. Cada reclamante fica com um único sócio, inclusive entre Tipos diferentes; os grupos indivisíveis podem alterar os percentuais finais.</p>`;
+    return `<table><thead><tr><th>Tipo</th><th>Qtd.</th><th>Regra</th><th>Meta de quantidade</th></tr></thead><tbody>${rows}</tbody></table><p><strong>Total carregado:</strong> ${master.length}</p><p class="fsp-ok">O Tipo classifica os processos. Cada reclamante fica com um único sócio. CNJs repetidos permanecem visíveis para auditoria, mas contam uma única vez no rateio de quantidade e valor.</p>`;
   }
 
   previewBtn.onclick = () => modal("Conferência dos grupos", previewHtml());
 
+  function uniqueForRateio(data) {
+    const seen = new Set();
+    return data.filter((row, index) => {
+      const cnj = norm(row["Número de CNJ"]);
+      if (!cnj) return true;
+      if (seen.has(cnj)) return false;
+      seen.add(cnj);
+      return true;
+    });
+  }
+
   function sum(data) {
     let ac = 0, av = 0, fc = 0, fv = 0;
-    data.forEach(row => {
+    uniqueForRateio(data).forEach(row => {
       const p = partner(row);
       const value = parseBRL(row["Valor da causa"]);
       if (p === "Ana") { ac++; av += value; }
@@ -598,6 +601,14 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      if (column === "Sócio a gerir") {
+        const p = norm(value);
+        if (p && p !== "ANA" && p !== "FLAVIO") {
+          modal("Sócio a gerir inválido", "<p>Em <strong>Sócio a gerir</strong>, use somente <strong>Ana</strong>, <strong>Flávio</strong> ou deixe em branco.</p>");
+          return false;
+        }
+      }
+
       draft[column] = value;
     }
 
@@ -618,7 +629,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (activeFilter) filtered = groupRows(activeFilter);
     else if ($("searchInput").value.trim()) {
       const text = norm($("searchInput").value);
-      filtered = master.filter(r => Object.entries(r).some(([key, value]) => !key.startsWith("__") && norm(value).includes(text)));
+      filtered = master.filter(r =>
+        norm(r["Reclamante"]).includes(text) || norm(r["Reclamada"]).includes(text)
+      );
     } else {
       filtered = [...master];
     }
@@ -831,7 +844,9 @@ window.addEventListener("DOMContentLoaded", () => {
   $("searchInput").oninput = () => {
     const text = norm($("searchInput").value);
     activeFilter = "";
-    filtered = master.filter(row => Object.entries(row).some(([key, value]) => !key.startsWith("__") && norm(value).includes(text)));
+    filtered = master.filter(row =>
+      norm(row["Reclamante"]).includes(text) || norm(row["Reclamada"]).includes(text)
+    );
     render(filtered);
     summaryUI(filtered);
   };
