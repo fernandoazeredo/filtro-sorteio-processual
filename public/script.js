@@ -559,6 +559,7 @@ window.addEventListener("DOMContentLoaded", () => {
   pager.hidden = true;
   pager.innerHTML = `
     <strong id="fspPagerInfo"></strong>
+    <span id="fspPagerTotal"></span>
     <button id="fspPagerPrev" class="btn btn-neutral" type="button">◀ Anterior</button>
     <span id="fspPagerPage"></span>
     <button id="fspPagerNext" class="btn btn-neutral" type="button">Próxima ▶</button>
@@ -576,23 +577,32 @@ window.addEventListener("DOMContentLoaded", () => {
   pagerStyle.textContent = `
     #fspPager{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px}
     #fspPager[hidden]{display:none}
+    #fspPagerTotal{padding:3px 10px;border-radius:6px;background:#dbeafe;color:#1e3a8a;font-weight:700}
+    :root[data-theme="dark"] #fspPagerTotal{background:#1e3a8a;color:#dbeafe}
     #fspPager label{display:flex;align-items:center;gap:6px;margin-left:auto}
     #fspPager select{width:auto}
   `;
   document.head.appendChild(pagerStyle);
 
   function updatePager(data) {
-    pager.hidden = !data.length;
-    if (!data.length) return;
-    const size = pageSize || data.length;
-    const first = pageIndex * size + 1;
+    pager.hidden = !master.length;
+    if (!master.length) return;
+    const size = pageSize || data.length || 1;
+    const pages = Math.max(1, Math.ceil(data.length / size));
+    const first = data.length ? pageIndex * size + 1 : 0;
     const last = Math.min((pageIndex + 1) * size, data.length);
-    const pages = Math.ceil(data.length / size);
-    $("fspPagerInfo").textContent = `Linhas ${first.toLocaleString("pt-BR")} a ${last.toLocaleString("pt-BR")} de ${data.length.toLocaleString("pt-BR")}`;
-    $("fspPagerPage").textContent = `Página ${pageIndex + 1} de ${pages}`;
+    $("fspPagerInfo").textContent = data.length
+      ? `Linhas ${first.toLocaleString("pt-BR")} a ${last.toLocaleString("pt-BR")} de ${data.length.toLocaleString("pt-BR")}`
+      : "Nenhuma linha encontrada";
+    $("fspPagerPage").textContent = `Página ${data.length ? pageIndex + 1 : 0} de ${data.length ? pages : 0}`;
+    // Resumo do que está na lista: quantidade e soma do Valor da causa.
+    const total = data.reduce((sum, row) => sum + parseBRL(row["Valor da causa"]), 0);
+    const label = activeFilter ? `Encontrados para "${activeFilter}"` : "Total da planilha";
+    $("fspPagerTotal").textContent = `${label}: ${data.length.toLocaleString("pt-BR")} processo(s) | Valor da causa: ${brl(total)}`;
     $("fspPagerPrev").disabled = pageIndex === 0;
     $("fspPagerNext").disabled = pageIndex >= pages - 1;
   }
+
 
   function goToPage(index) {
     pageIndex = Math.max(0, index);
