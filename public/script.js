@@ -300,7 +300,9 @@ window.addEventListener("DOMContentLoaded", () => {
       usedSheets = [allProcesses];
       rows = sheetRows(workbook, allProcesses);
     } else {
-      const statusSheets = workbook.SheetNames.filter(name => sheetLooksLikeStatusBase(workbook, name));
+      // A aba EXECUÇÃO - REINALDO é cópia de linhas da ALEATÓRIO e duplicaria os processos.
+      const ignoredSheets = ["EXECUCAO - REINALDO"];
+      const statusSheets = workbook.SheetNames.filter(name => !ignoredSheets.includes(norm(name)) && sheetLooksLikeStatusBase(workbook, name));
       if (statusSheets.length) {
         usedSheets = statusSheets;
         rows = statusSheets.flatMap(name => sheetRows(workbook, name));
