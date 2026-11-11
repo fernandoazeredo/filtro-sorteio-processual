@@ -5,7 +5,11 @@ window.addEventListener("DOMContentLoaded", () => {
     "Sócio a gerir", "Status Antigo - Execução (REINALDO)",
     "Status Antigo - Demais (SORTEIO ANTIGO)", "Tipo"
   ];
-  const DEFAULT_COLS = [...SOURCE_COLS, "Sorteado Para", "Aba de origem"];
+  const BASE_COLS = [...SOURCE_COLS, "Sorteado Para", "Aba de origem"];
+  // Colunas novas da planilha entram depois de Última Decisão; a lista é refeita a cada importação.
+  const DEFAULT_COLS = [...BASE_COLS];
+  const KNOWN_HEADERS = ["Aba Origem", "Aba de origem", "CNJ", "Categoria", "Classificacao", "Classificação", "Cliente", "Decisao", "Decisão", "Nome da Reclamada", "Nome do Reclamante", "Numero de CNJ", "Numero do Processo", "N°", "Nº", "Número de CNJ", "Número do Processo", "Reclamada", "Reclamado", "Reclamante", "Reu", "Ré", "Réu", "Socio", "Socio a gerir", "Sorteado Para", "Status Antigo", "Status Antigo - Demais (SORTEIO ANTIGO)", "Status Antigo - Execucao (REINALDO)", "Status Antigo - Execução (REINALDO)", "Status Antigo Demais", "Sócio", "Sócio a gerir", "Tipo", "Ultima Decisao", "Valor", "Valor da Causa", "Valor da causa", "Última Decisão", "Última decisão"];
+  let extraCols = [];
   const REPORT_COLS = ["Reclamante", "Reclamada", "Número de CNJ", "Valor da causa", "Última Decisão", "Sorteado Para"];
   const REQUIRED = ["Reclamante"];
 
@@ -254,6 +258,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const rows = [];
     for (const raw of XLSX.utils.sheet_to_json(sheet, {defval: "", raw: true, range: headerIndex})) {
       const row = normalizeSourceRow(raw, sheetName);
+      for (const [key, value] of Object.entries(raw)) {
+        const header = String(key).trim();
+        if (!header || header.startsWith("__EMPTY") || KNOWN_HEADERS.some(known => norm(known) === norm(header))) continue;
+        row[header] = value;
+        if (!extraCols.includes(header)) extraCols.push(header);
+      }
       const claimant = String(row["Reclamante"] ?? "").trim();
       // O quadro de resumo fica no fim da aba e não contém processos.
       if (norm(claimant) === "QUADRO RESUMO") break;
@@ -281,6 +291,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const allProcesses = workbook.SheetNames.find(name => norm(name) === "TODOS OS PROCESSOS");
     let usedSheets = [];
     let rows = [];
+    extraCols = [];
 
     if (preferred) {
       usedSheets = [preferred];
@@ -301,6 +312,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!rows.length) throw Error("Nenhum processo válido foi encontrado na planilha.");
+    const decisionIndex = BASE_COLS.indexOf("Última Decisão") + 1;
+    DEFAULT_COLS.splice(0, DEFAULT_COLS.length, ...BASE_COLS.slice(0, decisionIndex), ...extraCols, ...BASE_COLS.slice(decisionIndex));
 
     // Novo sorteio: preserva os status e o Sócio a gerir da origem, mas limpa a nova atribuição.
     const cleaned = rows.map(row => ({...onlyOperationalCols(row), "Sorteado Para": ""}));
@@ -608,6 +621,7 @@ window.addEventListener("DOMContentLoaded", () => {
     // Na tela, Sorteado Para fica ao lado dos nomes para o resultado ser visto sem rolar.
     const first = ["Reclamante", "Reclamada", "Sorteado Para"].filter(column => chosen.includes(column));
     const cols = [...first, ...chosen.filter(column => !first.includes(column))];
+    $("mainTable").style.width = `max(100%, ${1530 + 130 * cols.filter(column => extraCols.includes(column)).length}px)`;
     const selectHeader = document.createElement("th");
     const selectAll = document.createElement("input");
     selectAll.type = "checkbox";
@@ -618,6 +632,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const th = document.createElement("th");
       th.textContent = column === "Valor da causa" ? "Valor da causa (R$)" : column;
       th.dataset.column = column;
+      if (extraCols.includes(column)) th.style.width = "130px";
       header.appendChild(th);
     });
 
